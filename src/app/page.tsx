@@ -23,8 +23,9 @@ import {
   StorageMonitorPanel,
   ProjectManagerPanel,
   DocsPanel,
+  ClaudeTerminal,
 } from '../components/panels';
-// ClaudeTerminal removed - now using two-tab chat interface (Claude/Chad)
+// Claude uses Terminal (subscription), Chad uses API chat
 
 // Hooks
 import { useCatalogerWorker } from '../hooks/useCatalogerWorker';
@@ -661,8 +662,11 @@ User: The Boss`;
                 </button>
               </div>
 
-              {/* Chat Interface - Both Claude and Chad */}
-              <>
+              {/* Claude = Terminal (subscription), Chad = Chat (API) */}
+              {chatMode === 'claude' ? (
+                <ClaudeTerminal projectPath={selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'} />
+              ) : (
+                <>
                 <div className="flex-1 overflow-auto p-3 space-y-3">
                   {messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -680,7 +684,7 @@ User: The Boss`;
                     <div className="flex justify-start">
                       <div className="max-w-[90%] rounded-lg px-3 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-200">
                         <MessageContent content={streamingContent} />
-                        <span className={`inline-block w-2 h-4 animate-pulse ml-1 ${chatMode === 'claude' ? 'bg-orange-500' : 'bg-blue-500'}`} />
+                        <span className="inline-block w-2 h-4 animate-pulse ml-1 bg-blue-500" />
                       </div>
                     </div>
                   )}
@@ -688,7 +692,7 @@ User: The Boss`;
                   {isSending && !streamingContent && (
                     <div className="flex justify-start">
                       <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
-                        <div className={`flex items-center gap-2 text-sm ${chatMode === 'claude' ? 'text-orange-400' : 'text-blue-400'}`}>
+                        <div className="flex items-center gap-2 text-sm text-blue-400">
                           <span className="animate-pulse">●</span>
                           <span className="animate-pulse" style={{ animationDelay: '150ms' }}>●</span>
                           <span className="animate-pulse" style={{ animationDelay: '300ms' }}>●</span>
@@ -747,29 +751,26 @@ User: The Boss`;
                           handleSendMessage();
                         }
                       }}
-                      placeholder={chatMode === 'claude' ? 'Ask Claude (smarter, uses Sonnet)...' : 'Quick question for Chad (faster, uses Haiku)...'}
+                      placeholder="Quick question for Chad (GPT-4o-mini, ~$0.001/msg)..."
                       rows={3}
-                      className={`flex-1 bg-gray-700 border rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none resize-none ${
-                        chatMode === 'claude' ? 'border-orange-600/50 focus:border-orange-500' : 'border-gray-600 focus:border-blue-500'
-                      }`}
+                      className="flex-1 bg-gray-700 border border-gray-600 focus:border-blue-500 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none resize-none"
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={(!inputMessage.trim() && attachedFiles.length === 0) || isSending}
-                      className={`px-3 py-2 disabled:bg-gray-600 text-white rounded-lg text-sm ${
-                        chatMode === 'claude' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'
-                      }`}
+                      className="px-3 py-2 disabled:bg-gray-600 text-white rounded-lg text-sm bg-blue-600 hover:bg-blue-700"
                     >
                       {isSending ? '...' : '→'}
                     </button>
                   </div>
                   {lastUsage && (
-                    <div className={`text-xs mt-1 text-right ${chatMode === 'claude' ? 'text-orange-500/60' : 'text-blue-500/60'}`}>
-                      {chatMode === 'claude' ? 'Sonnet' : 'Haiku'} | {lastUsage.input_tokens + lastUsage.output_tokens} tokens (${lastUsage.cost_usd.toFixed(4)})
+                    <div className="text-xs mt-1 text-right text-blue-500/60">
+                      GPT-4o-mini | {lastUsage.input_tokens + lastUsage.output_tokens} tokens (${lastUsage.cost_usd.toFixed(4)})
                     </div>
                   )}
                 </div>
               </>
+              )}
             </div>
           </div>
 
