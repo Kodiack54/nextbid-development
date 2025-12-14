@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser, useMinRole } from './contexts/UserContext';
-import { DoorOpen } from 'lucide-react';
+import { DoorOpen, FileText, Save } from 'lucide-react';
 import ChatDropdown from '../components/ChatDropdown';
 import TimeClockDropdown from '../components/TimeClockDropdown';
 import SettingsDropdown from '../components/SettingsDropdown';
+import { useSession } from '../hooks/useSession';
 
 // Types
 interface Project {
@@ -49,6 +50,17 @@ export default function DevEnvironmentPage() {
   const { user, isLoading: userLoading } = useUser();
   const hasAccess = useMinRole('engineer');
 
+  // Session management
+  const {
+    session,
+    messages: sessionMessages,
+    isLoading: sessionLoading,
+    startSession,
+    addMessage,
+    endSession,
+    summarizeSession,
+  } = useSession();
+
   // State
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -57,11 +69,20 @@ export default function DevEnvironmentPage() {
   const [isLocking, setIsLocking] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [sessionSummary, setSessionSummary] = useState<{
+    summary: string;
+    key_points: string[];
+    action_items: string[];
+    context_for_next_session: string;
+  } | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
-  // Chat state
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
+  // Chat state - use session messages if available, otherwise local
+  const [localMessages, setLocalMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
     { role: 'assistant', content: 'Hello! I\'m Claude, your AI coding assistant. Select a project to get started, then ask me anything about your code.' }
   ]);
+  const messages = sessionMessages.length > 0 ? sessionMessages : localMessages;
 
   // Logout confirmation
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -74,6 +95,34 @@ export default function DevEnvironmentPage() {
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  // Start session when user is available
+  useEffect(() => {
+    if (user?.id && !session && !sessionLoading) {
+      startSession(user.id, selectedProject?.id);
+    }
+  }, [user?.id, session, sessionLoading, selectedProject?.id, startSession]);
+
+  // Handle summarize session
+  const handleSummarize = async () => {
+    setIsSummarizing(true);
+    const summary = await summarizeSession();
+    if (summary) {
+      setSessionSummary(summary);
+      setShowSummaryModal(true);
+    }
+    setIsSummarizing(false);
+  };
+
+  // Handle end session
+  const handleEndSession = async () => {
+    await handleSummarize(); // Summarize before ending
+    await endSession();
+    // Start a new session
+    if (user?.id) {
+      startSession(user.id, selectedProject?.id);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -126,7 +175,9 @@ export default function DevEnvironmentPage() {
     if (!inputMessage.trim() || isSending) return;
 
     const userMessage = inputMessage.trim();
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Add user message to session (persists to DB)
+    addMessage({ role: 'user', content: userMessage });
+    setLocalMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setInputMessage('');
     setIsSending(true);
     setStreamingContent('');
@@ -154,6 +205,7 @@ export default function DevEnvironmentPage() {
 
       const decoder = new TextDecoder();
       let fullContent = '';
+      let usageData: { input_tokens: number; output_tokens: number; cost_usd: number } | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -170,6 +222,7 @@ export default function DevEnvironmentPage() {
                 fullContent += data.text;
                 setStreamingContent(fullContent);
               } else if (data.type === 'done') {
+                usageData = data.usage;
                 setLastUsage(data.usage);
               } else if (data.type === 'error') {
                 throw new Error(data.error);
@@ -181,15 +234,23 @@ export default function DevEnvironmentPage() {
         }
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
+      // Add assistant message to session (persists to DB with usage stats)
+      addMessage({
+        role: 'assistant',
+        content: fullContent,
+        input_tokens: usageData?.input_tokens,
+        output_tokens: usageData?.output_tokens,
+        cost_usd: usageData?.cost_usd,
+        model: 'claude-3-5-sonnet-20241022',
+      });
+      setLocalMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
       setStreamingContent('');
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Sorry, I encountered an error: ${errorMessage}\n\nPlease check that your Anthropic API key is configured in the .env file.`
-      }]);
+      const errContent = `Sorry, I encountered an error: ${errorMessage}\n\nPlease check that your Anthropic API key is configured in the .env file.`;
+      addMessage({ role: 'assistant', content: errContent });
+      setLocalMessages(prev => [...prev, { role: 'assistant', content: errContent }]);
     } finally {
       setIsSending(false);
     }
@@ -542,8 +603,37 @@ export default function DevEnvironmentPage() {
 
             {/* Chat Log - 1/3 */}
             <div className="flex-1 border-l border-gray-700 bg-gray-850 flex flex-col">
-              <div className="px-3 py-2 border-b border-gray-700 bg-gray-800">
-                <span className="text-sm font-medium text-gray-400">Chat Log</span>
+              <div className="px-3 py-2 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-400">Chat Log</span>
+                  {session && (
+                    <span className="text-xs text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded">
+                      {messages.length} msgs
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleSummarize}
+                    disabled={isSummarizing || messages.length < 2}
+                    className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
+                    title="Summarize Session"
+                  >
+                    {isSummarizing ? (
+                      <span className="animate-spin text-xs">⏳</span>
+                    ) : (
+                      <FileText size={14} />
+                    )}
+                  </button>
+                  <button
+                    onClick={handleEndSession}
+                    disabled={!session || messages.length < 2}
+                    className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-orange-400 disabled:opacity-50"
+                    title="End Session & Summarize"
+                  >
+                    <Save size={14} />
+                  </button>
+                </div>
               </div>
               <div className="flex-1 overflow-auto p-3 space-y-2">
                 {messages.map((msg, i) => (
@@ -577,6 +667,90 @@ export default function DevEnvironmentPage() {
               fetchProjects();
             }}
           />
+        )}
+
+        {/* Session Summary Modal */}
+        {showSummaryModal && sessionSummary && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <FileText size={20} />
+                  Session Summary
+                </h2>
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Main Summary */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-400 mb-2">Summary</h3>
+                  <p className="text-gray-200 bg-gray-900/50 p-3 rounded-lg">
+                    {sessionSummary.summary}
+                  </p>
+                </div>
+
+                {/* Key Points */}
+                {sessionSummary.key_points.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Key Points</h3>
+                    <ul className="list-disc list-inside text-gray-300 space-y-1">
+                      {sessionSummary.key_points.map((point, i) => (
+                        <li key={i}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Action Items */}
+                {sessionSummary.action_items.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Action Items</h3>
+                    <ul className="space-y-1">
+                      {sessionSummary.action_items.map((item, i) => (
+                        <li key={i} className="flex items-center gap-2 text-gray-300">
+                          <span className="text-yellow-400">☐</span>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Context for Next Session */}
+                {sessionSummary.context_for_next_session && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Context for Next Session</h3>
+                    <div className="bg-blue-900/30 border border-blue-700/50 p-3 rounded-lg text-blue-200 text-sm">
+                      <p className="italic">{sessionSummary.context_for_next_session}</p>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(sessionSummary.context_for_next_session);
+                        }}
+                        className="mt-2 text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded"
+                      >
+                        Copy to Clipboard
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         </div>
       </div>
