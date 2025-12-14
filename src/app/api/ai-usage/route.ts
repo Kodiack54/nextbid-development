@@ -53,9 +53,10 @@ export async function GET(request: NextRequest) {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
+    // Query without foreign key joins (relationships may not exist)
     let query = supabase
       .from('dev_ai_usage')
-      .select('*, dev_users(name), dev_projects(name, slug)')
+      .select('*')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false });
 
@@ -87,35 +88,37 @@ export async function GET(request: NextRequest) {
     const byType: Record<string, { requests: number; tokens: number; cost: number }> = {};
 
     usage?.forEach((row) => {
-      totals.input_tokens += row.input_tokens;
-      totals.output_tokens += row.output_tokens;
-      totals.total_tokens += row.input_tokens + row.output_tokens;
+      totals.input_tokens += row.input_tokens || 0;
+      totals.output_tokens += row.output_tokens || 0;
+      totals.total_tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
       totals.cost_usd += parseFloat(row.cost_usd) || 0;
 
-      const userName = row.dev_users?.name || 'Unknown';
-      if (!byUser[row.user_id]) {
-        byUser[row.user_id] = { name: userName, requests: 0, tokens: 0, cost: 0 };
+      // Group by user (use ID as name since we don't join)
+      const userId = row.user_id || 'unknown';
+      if (!byUser[userId]) {
+        byUser[userId] = { name: userId.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
       }
-      byUser[row.user_id].requests++;
-      byUser[row.user_id].tokens += row.input_tokens + row.output_tokens;
-      byUser[row.user_id].cost += parseFloat(row.cost_usd) || 0;
+      byUser[userId].requests++;
+      byUser[userId].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
+      byUser[userId].cost += parseFloat(row.cost_usd) || 0;
 
+      // Group by project
       if (row.project_id) {
-        const projectName = row.dev_projects?.name || 'Unknown';
         if (!byProject[row.project_id]) {
-          byProject[row.project_id] = { name: projectName, requests: 0, tokens: 0, cost: 0 };
+          byProject[row.project_id] = { name: row.project_id.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
         }
         byProject[row.project_id].requests++;
-        byProject[row.project_id].tokens += row.input_tokens + row.output_tokens;
+        byProject[row.project_id].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
         byProject[row.project_id].cost += parseFloat(row.cost_usd) || 0;
       }
 
+      // Group by request type
       const requestType = row.request_type || 'chat';
       if (!byType[requestType]) {
         byType[requestType] = { requests: 0, tokens: 0, cost: 0 };
       }
       byType[requestType].requests++;
-      byType[requestType].tokens += row.input_tokens + row.output_tokens;
+      byType[requestType].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
       byType[requestType].cost += parseFloat(row.cost_usd) || 0;
     });
 
