@@ -127,67 +127,63 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
           // Remove other common control sequences
           data = data.replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
 
-          // Handle carriage returns - they mean "replace current line"
-          // Split by \r first to handle line overwrites
-          const crParts = data.split('\r');
+          // Simple approach: only keep meaningful content, skip TUI noise
+          const lines = data.split(/[\r\n]+/).filter((l: string) => l.length > 0);
 
           setOutput(prev => {
             const newOutput = [...prev];
 
-            for (const part of crParts) {
-              // Split by newlines
-              const lines = part.split('\n').filter((l: string) => l.length > 0);
+            for (const line of lines) {
+              const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '').trim();
 
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+              // Skip empty lines after cleaning
+              if (!cleanLine) continue;
 
-                // Skip lines that are just UI noise
-                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning|Cogitating)/.test(cleanLine);
-                const isShortcutHint = cleanLine === '? for shortcuts';
-                const isEmptyPrompt = /^>\s*$/.test(cleanLine);
-                const isDivider = /^[─]+$/.test(cleanLine);
-                const isThoughtLine = /^∴\s*Thought?\s*(for|\.\.\.)/i.test(cleanLine);
-
-                // Claude's actual response starts with ● - ALWAYS keep these!
-                const isClaudeResponse = cleanLine.startsWith('●') || /^[●○◐◑]\s/.test(cleanLine);
-                if (isClaudeResponse) {
-                  newOutput.push(line);
-                  continue;
-                }
-
-                // Skip shortcut hints and empty prompts
-                if (isShortcutHint || isEmptyPrompt) {
-                  continue;
-                }
-
-                // Skip thought duration lines (we already saw thinking)
-                if (isThoughtLine) {
-                  continue;
-                }
-
-                // Collapse consecutive dividers
-                if (isDivider && newOutput.length > 0) {
-                  const lastClean = newOutput[newOutput.length - 1].replace(/\x1b\[[0-9;]*m/g, '').trim();
-                  if (/^[─]+$/.test(lastClean)) {
-                    continue;
-                  }
-                }
-
-                if (isSpinnerLine && newOutput.length > 0) {
-                  // Update last line instead of adding
-                  newOutput[newOutput.length - 1] = line;
-                } else if (i === 0 && crParts.indexOf(part) > 0) {
-                  // After a \r, replace last line
-                  if (newOutput.length > 0) {
-                    newOutput[newOutput.length - 1] = line;
-                  } else {
-                    newOutput.push(line);
-                  }
-                } else {
-                  newOutput.push(line);
-                }
+              // === KEEP: Actual Claude responses (● prefix) ===
+              if (/^●/.test(cleanLine)) {
+                newOutput.push('\x1b[97m' + cleanLine + '\x1b[0m');
+                continue;
               }
+
+              // === KEEP: User input prompts with content ===
+              if (/^>\s*.+/.test(cleanLine) && !/^>\s*$/.test(cleanLine)) {
+                newOutput.push('\x1b[94m' + cleanLine + '\x1b[0m');
+                continue;
+              }
+
+              // === KEEP: Connection messages ===
+              if (cleanLine.includes('[Dev Studio Terminal]') || cleanLine.includes('[Connected]') || cleanLine.includes('[Disconnected]')) {
+                newOutput.push(line);
+                continue;
+              }
+
+              // === KEEP: Claude Code welcome box (first time only) ===
+              if (cleanLine.includes('Welcome') && cleanLine.includes('Michael')) {
+                newOutput.push(line);
+                continue;
+              }
+
+              // === KEEP: Error messages ===
+              if (/error|failed|exception/i.test(cleanLine)) {
+                newOutput.push('\x1b[91m' + cleanLine + '\x1b[0m');
+                continue;
+              }
+
+              // === UPDATE: Status spinner (just one line) ===
+              if (/^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning|Cogitating)/i.test(cleanLine)) {
+                // Find and update existing status line, or add new one
+                const statusIdx = newOutput.findIndex(l =>
+                  /Musing|Thinking|Working|Churning|Cogitating/i.test(l.replace(/\x1b\[[0-9;]*m/g, ''))
+                );
+                if (statusIdx >= 0) {
+                  newOutput[statusIdx] = '\x1b[33m⏳ ' + cleanLine + '\x1b[0m';
+                } else {
+                  newOutput.push('\x1b[33m⏳ ' + cleanLine + '\x1b[0m');
+                }
+                continue;
+              }
+
+              // Skip everything else (dividers, shortcuts, prompts, etc.)
             }
 
             return newOutput;
