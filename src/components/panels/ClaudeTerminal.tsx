@@ -128,9 +128,9 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     setConnecting(true);
 
-    // Determine WebSocket URL
+    // Determine WebSocket URL - Claude Code terminal on port 5400
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const wsEndpoint = wsUrl || `ws://${host}:5001`;
+    const wsEndpoint = wsUrl || `ws://${host}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
 
     const ws = new WebSocket(fullUrl);

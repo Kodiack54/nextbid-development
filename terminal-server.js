@@ -8,7 +8,7 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const os = require('os');
 
-const PORT = process.env.TERMINAL_WS_PORT || 5001;
+const PORT = process.env.TERMINAL_WS_PORT || 5400;
 
 // Track active sessions
 const sessions = new Map();
