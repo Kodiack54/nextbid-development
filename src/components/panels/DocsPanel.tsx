@@ -120,7 +120,7 @@ export function DocsPanel({ projectPath }: DocsPanelProps) {
   // Simple markdown renderer
   function renderMarkdown(content: string) {
     const lines = content.split('\n');
-    const elements: JSX.Element[] = [];
+    const elements: React.ReactNode[] = [];
     let inCodeBlock = false;
     let codeContent = '';
     let codeLanguage = '';
