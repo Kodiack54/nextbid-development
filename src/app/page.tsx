@@ -27,6 +27,7 @@ import {
 
 // Hooks
 import { useCatalogerWorker } from '../hooks/useCatalogerWorker';
+import { useDocWorker } from '../hooks/useDocWorker';
 
 // Modals
 import { UnlockModal, SummaryModal, LogoutConfirmModal } from '../components/modals';
@@ -58,7 +59,13 @@ export default function DevEnvironmentPage() {
 
   // Cataloger worker - runs in background to process sessions
   const { status: catalogerStatus, triggerNow: triggerCataloger } = useCatalogerWorker({
-    intervalMs: 60000, // Run every 60 seconds
+    intervalMs: 60000,
+    enabled: true,
+  });
+
+  // Doc Worker - runs every 5 minutes to auto-document conversations
+  const { status: docWorkerStatus, triggerNow: triggerDocWorker, lastResult: docWorkerResult } = useDocWorker({
+    intervalMs: 300000, // Run every 5 minutes
     enabled: true,
   });
 
@@ -489,7 +496,7 @@ export default function DevEnvironmentPage() {
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}
               {activePanel === 'projects' && <ProjectManagerPanel onProjectsChange={fetchProjects} />}
-              {activePanel === 'docs' && <DocsPanel />}
+              {activePanel === 'docs' && <DocsPanel workerStatus={docWorkerStatus} onTriggerWorker={triggerDocWorker} />}
             </div>
           </div>
         )}

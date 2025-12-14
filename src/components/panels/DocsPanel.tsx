@@ -22,10 +22,12 @@ interface DocMetadata {
 }
 
 interface DocsPanelProps {
+  workerStatus?: 'idle' | 'running' | 'success' | 'error';
+  onTriggerWorker?: () => void;
   projectPath?: string;
 }
 
-export function DocsPanel({ projectPath }: DocsPanelProps) {
+export function DocsPanel({ projectPath, workerStatus, onTriggerWorker }: DocsPanelProps) {
   const [docs, setDocs] = useState<DocFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
@@ -213,13 +215,24 @@ export function DocsPanel({ projectPath }: DocsPanelProps) {
           <BookOpen className="w-5 h-5 text-purple-400" />
           <h2 className="text-white font-semibold">Documentation</h2>
         </div>
-        <button
-          onClick={loadDocs}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
-          title="Refresh"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {workerStatus && (
+            <button
+              onClick={onTriggerWorker}
+              className={}
+              title="Auto-doc worker (runs every 5 min)"
+            >
+              {workerStatus === 'running' ? '⏳' : '🤖'} Auto-Doc
+            </button>
+          )}
+          <button
+            onClick={loadDocs}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {error ? (
