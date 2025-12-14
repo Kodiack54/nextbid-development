@@ -157,11 +157,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
   }, []);
 
   const sendInput = useCallback(() => {
-    if (!inputValue.trim() && inputValue !== '') return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Show what user typed
-      setOutput(prev => [...prev, `\x1b[94m$ ${inputValue}\x1b[0m`]);
-      // Send with newline to execute
+      // Send input with newline (allow empty for just Enter key)
       wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\n' }));
       setInputValue('');
     }
