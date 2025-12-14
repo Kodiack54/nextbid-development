@@ -13,8 +13,8 @@ const PORT = process.env.TERMINAL_WS_PORT || 5400;
 // Track active sessions
 const sessions = new Map();
 
-const wss = new WebSocket.Server({ port: PORT }, () => {
-  console.log(`[Terminal Server] WebSocket server running on port ${PORT}`);
+const wss = new WebSocket.Server({ host: '0.0.0.0', port: PORT }, () => {
+  console.log(`[Terminal Server] WebSocket server running on 0.0.0.0:${PORT}`);
 });
 
 wss.on('connection', (ws, req) => {
