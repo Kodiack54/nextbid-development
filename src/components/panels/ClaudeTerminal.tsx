@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Terminal, Power, PowerOff, Maximize2, Minimize2, FolderOpen } from 'lucide-react';
+import { Terminal, Power, PowerOff, FolderOpen } from 'lucide-react';
 
 interface ClaudeTerminalProps {
   projectPath?: string;
@@ -9,135 +9,77 @@ interface ClaudeTerminalProps {
 }
 
 export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-5000', wsUrl }: ClaudeTerminalProps) {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const fitAddonRef = useRef<any>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [output, setOutput] = useState<string[]>([
+    '\x1b[36m═══════════════════════════════════════════\x1b[0m',
+    '\x1b[36m    Claude Code Terminal (Subscription)    \x1b[0m',
+    '\x1b[36m═══════════════════════════════════════════\x1b[0m',
+    '',
+    '\x1b[33mClick "Connect" then type commands below\x1b[0m',
+    `\x1b[90mProject: ${projectPath}\x1b[0m`,
+    '',
+  ]);
+  const [inputValue, setInputValue] = useState('');
 
-  // Dynamic import of xterm (client-side only)
-  const initTerminal = useCallback(async () => {
-    if (!terminalRef.current || xtermRef.current) return;
-
-    const { Terminal } = await import('@xterm/xterm');
-    const { FitAddon } = await import('@xterm/addon-fit');
-    const { WebLinksAddon } = await import('@xterm/addon-web-links');
-
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      fontSize: 13,
-      fontFamily: '"Cascadia Code", "Fira Code", Consolas, monospace',
-      theme: {
-        background: '#1a1b26',
-        foreground: '#a9b1d6',
-        cursor: '#c0caf5',
-        cursorAccent: '#1a1b26',
-        selectionBackground: '#33467c',
-        black: '#32344a',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#ad8ee6',
-        cyan: '#449dab',
-        white: '#787c99',
-        brightBlack: '#444b6a',
-        brightRed: '#ff7a93',
-        brightGreen: '#b9f27c',
-        brightYellow: '#ff9e64',
-        brightBlue: '#7da6ff',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#0db9d7',
-        brightWhite: '#acb0d0',
-      },
-      allowProposedApi: true,
-      disableStdin: false,
-      convertEol: true,
-    });
-
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-
-    term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
-
-    term.open(terminalRef.current);
-    fitAddon.fit();
-
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    // Focus terminal after a short delay to ensure DOM is ready
-    setTimeout(() => {
-      term.focus();
-    }, 100);
-
-    // Welcome message
-    term.writeln('\x1b[1;36m╔════════════════════════════════════════════╗\x1b[0m');
-    term.writeln('\x1b[1;36m║     Dev Studio - Claude Code Terminal      ║\x1b[0m');
-    term.writeln('\x1b[1;36m╚════════════════════════════════════════════╝\x1b[0m');
-    term.writeln('');
-    term.writeln('\x1b[33mClick "Connect" to start Claude Code session\x1b[0m');
-    term.writeln(`\x1b[90mProject: ${projectPath}\x1b[0m`);
-    term.writeln('');
-
-    // Handle terminal input
-    term.onData((data) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'input', data }));
-      }
-    });
-
-    // Handle resize
-    const handleResize = () => {
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-        if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
-          wsRef.current.send(JSON.stringify({
-            type: 'resize',
-            cols: xtermRef.current.cols,
-            rows: xtermRef.current.rows,
-          }));
-        }
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [projectPath]);
-
-  // Initialize terminal on mount
+  // Auto-scroll output
   useEffect(() => {
-    initTerminal();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (xtermRef.current) {
-        xtermRef.current.dispose();
-      }
-    };
-  }, [initTerminal]);
-
-  // Refit when fullscreen changes
-  useEffect(() => {
-    if (fitAddonRef.current) {
-      setTimeout(() => fitAddonRef.current.fit(), 100);
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [isFullscreen]);
+  }, [output]);
+
+  // Strip ANSI codes for display (simple version)
+  const stripAnsi = (str: string) => {
+    return str.replace(/\x1b\[[0-9;]*m/g, '');
+  };
+
+  // Parse ANSI to styled spans
+  const parseAnsi = (text: string) => {
+    const parts: { text: string; color: string }[] = [];
+    let currentColor = 'text-gray-300';
+    let remaining = text;
+
+    const colorMap: Record<string, string> = {
+      '30': 'text-gray-800', '31': 'text-red-400', '32': 'text-green-400',
+      '33': 'text-yellow-400', '34': 'text-blue-400', '35': 'text-purple-400',
+      '36': 'text-cyan-400', '37': 'text-gray-300', '90': 'text-gray-500',
+      '91': 'text-red-300', '92': 'text-green-300', '93': 'text-yellow-300',
+      '94': 'text-blue-300', '95': 'text-purple-300', '96': 'text-cyan-300',
+      '0': 'text-gray-300',
+    };
+
+    const regex = /\x1b\[([0-9;]+)m/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(remaining)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ text: remaining.slice(lastIndex, match.index), color: currentColor });
+      }
+      const codes = match[1].split(';');
+      for (const code of codes) {
+        if (colorMap[code]) currentColor = colorMap[code];
+      }
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < remaining.length) {
+      parts.push({ text: remaining.slice(lastIndex), color: currentColor });
+    }
+
+    return parts.length ? parts : [{ text, color: currentColor }];
+  };
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setConnecting(true);
 
-    // Connect directly to Dev droplet terminal server on port 5400
-    // This works regardless of how user accesses dev-studio (direct or through gateway)
     const DEV_DROPLET = '161.35.229.220';
     const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
@@ -147,78 +89,72 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     ws.onopen = () => {
       setConnected(true);
       setConnecting(false);
-      xtermRef.current?.writeln('\x1b[32m[Connected]\x1b[0m Starting Claude Code...\r\n');
-      xtermRef.current?.writeln('\x1b[90mType "claude" to start your Claude Code session\x1b[0m\r\n');
-
-      // Send initial resize
-      if (xtermRef.current) {
-        ws.send(JSON.stringify({
-          type: 'resize',
-          cols: xtermRef.current.cols,
-          rows: xtermRef.current.rows,
-        }));
-        // Focus the terminal so user can type - multiple attempts
-        xtermRef.current.focus();
-        setTimeout(() => xtermRef.current?.focus(), 50);
-        setTimeout(() => xtermRef.current?.focus(), 200);
-      }
+      setOutput(prev => [...prev, '\x1b[32m[Connected]\x1b[0m Type "claude" to start Claude Code', '']);
+      ws.send(JSON.stringify({ type: 'resize', cols: 120, rows: 30 }));
+      inputRef.current?.focus();
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        switch (msg.type) {
-          case 'output':
-            xtermRef.current?.write(msg.data);
-            break;
-          case 'exit':
-            xtermRef.current?.writeln(`\r\n\x1b[33m[Process exited with code ${msg.code}]\x1b[0m`);
-            setConnected(false);
-            break;
-          case 'error':
-            xtermRef.current?.writeln(`\r\n\x1b[31m[Error: ${msg.message}]\x1b[0m`);
-            break;
+        if (msg.type === 'output') {
+          // Split by newlines and add each line
+          const lines = msg.data.split(/\r?\n/);
+          setOutput(prev => [...prev, ...lines.filter((l: string) => l)]);
+        } else if (msg.type === 'exit') {
+          setOutput(prev => [...prev, `\x1b[33m[Process exited: ${msg.code}]\x1b[0m`]);
+          setConnected(false);
         }
-      } catch (e) {
-        // Raw data
-        xtermRef.current?.write(event.data);
+      } catch {
+        setOutput(prev => [...prev, event.data]);
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      xtermRef.current?.writeln('\r\n\x1b[31m[Connection error]\x1b[0m');
+    ws.onerror = () => {
+      setOutput(prev => [...prev, '\x1b[31m[Connection error]\x1b[0m']);
       setConnecting(false);
     };
 
     ws.onclose = () => {
       setConnected(false);
       setConnecting(false);
-      xtermRef.current?.writeln('\r\n\x1b[33m[Disconnected]\x1b[0m');
+      setOutput(prev => [...prev, '\x1b[33m[Disconnected]\x1b[0m']);
     };
 
     wsRef.current = ws;
   }, [projectPath, wsUrl]);
 
   const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    wsRef.current?.close();
+    wsRef.current = null;
     setConnected(false);
   }, []);
 
-  const clearTerminal = useCallback(() => {
-    xtermRef.current?.clear();
-  }, []);
+  const sendInput = useCallback(() => {
+    if (!inputValue.trim() && inputValue !== '') return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Show what user typed
+      setOutput(prev => [...prev, `\x1b[94m$ ${inputValue}\x1b[0m`]);
+      // Send with newline to execute
+      wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\n' }));
+      setInputValue('');
+    }
+  }, [inputValue]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      sendInput();
+    }
+  };
 
   return (
-    <div className={`flex flex-col bg-gray-900 ${isFullscreen ? 'fixed inset-0 z-50' : 'h-full'}`}>
+    <div className="flex flex-col h-full bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-cyan-400" />
+          <Terminal className="w-4 h-4 text-orange-400" />
           <span className="text-sm font-medium text-white">Claude Code</span>
+          <span className="text-xs text-orange-400/60">(Subscription)</span>
           <span className={`px-1.5 py-0.5 text-xs rounded ${
             connected ? 'bg-green-600/20 text-green-400' :
             connecting ? 'bg-yellow-600/20 text-yellow-400' :
@@ -229,14 +165,6 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
-            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-
           {connected ? (
             <button
               onClick={disconnect}
@@ -258,30 +186,49 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         </div>
       </div>
 
-      {/* Project path indicator */}
-      <div className="flex items-center gap-2 px-3 py-1 bg-gray-850 border-b border-gray-700 text-xs text-gray-500">
+      {/* Project path */}
+      <div className="flex items-center gap-2 px-3 py-1 bg-gray-800/50 border-b border-gray-700 text-xs text-gray-500">
         <FolderOpen className="w-3 h-3" />
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Terminal - click anywhere to focus */}
+      {/* Output area */}
       <div
-        ref={terminalRef}
-        tabIndex={-1}
-        className="flex-1 p-1 cursor-text"
-        style={{ minHeight: '300px' }}
-        onClick={(e) => {
-          e.preventDefault();
-          xtermRef.current?.focus();
-        }}
-        onMouseDown={(e) => {
-          // Prevent stealing focus from xterm's internal textarea
-          if (e.target === terminalRef.current) {
-            e.preventDefault();
-            xtermRef.current?.focus();
-          }
-        }}
-      />
+        ref={outputRef}
+        className="flex-1 overflow-auto p-3 font-mono text-sm bg-[#1a1b26] space-y-0.5"
+      >
+        {output.map((line, i) => (
+          <div key={i} className="whitespace-pre-wrap break-all">
+            {parseAnsi(line).map((part, j) => (
+              <span key={j} className={part.color}>{part.text}</span>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Input area */}
+      <div className="p-2 bg-gray-800 border-t border-gray-700">
+        <div className="flex gap-2">
+          <span className="text-orange-400 font-mono text-sm py-2">$</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!connected}
+            placeholder={connected ? 'Type command and press Enter...' : 'Click Connect first'}
+            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50"
+          />
+          <button
+            onClick={sendInput}
+            disabled={!connected}
+            className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded text-sm"
+          >
+            Send
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
