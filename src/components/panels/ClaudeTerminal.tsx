@@ -124,9 +124,40 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
           // Remove other common control sequences
           data = data.replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
 
-          // Split by newlines and add each line (keep lines with box chars even if no text)
-          const lines = data.split(/\r?\n/);
-          setOutput(prev => [...prev, ...lines.filter((l: string) => l.length > 0)]);
+          // Handle carriage returns - they mean "replace current line"
+          // Split by \r first to handle line overwrites
+          const crParts = data.split('\r');
+
+          setOutput(prev => {
+            const newOutput = [...prev];
+
+            for (const part of crParts) {
+              // Split by newlines
+              const lines = part.split('\n').filter((l: string) => l.length > 0);
+
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Skip spinner-only lines (status updates that spam)
+                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working)/.test(line.replace(/\x1b\[[0-9;]*m/g, ''));
+
+                if (isSpinnerLine && newOutput.length > 0) {
+                  // Update last line instead of adding
+                  newOutput[newOutput.length - 1] = line;
+                } else if (i === 0 && crParts.indexOf(part) > 0) {
+                  // After a \r, replace last line
+                  if (newOutput.length > 0) {
+                    newOutput[newOutput.length - 1] = line;
+                  } else {
+                    newOutput.push(line);
+                  }
+                } else {
+                  newOutput.push(line);
+                }
+              }
+            }
+
+            return newOutput;
+          });
         } else if (msg.type === 'exit') {
           setOutput(prev => [...prev, `\x1b[33m[Process exited: ${msg.code}]\x1b[0m`]);
           setConnected(false);
