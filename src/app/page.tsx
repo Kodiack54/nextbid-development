@@ -82,6 +82,9 @@ export default function DevEnvironmentPage() {
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
+  // Toggle between Claude (Sonnet) and Chad (Haiku)
+  const [chatMode, setChatMode] = useState<'claude' | 'chad'>('claude');
+
   // Separate chat histories for each AI team member
   const [claudeMessages, setClaudeMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
     { role: 'assistant', content: "Hey Boss! I'm Claude, your Lead Programmer.\n\nI handle the complex stuff - architecture, deep problem solving, thorough code reviews. I use Sonnet so I'm smarter but cost a bit more.\n\nWhat are we building today?" }
@@ -105,9 +108,6 @@ export default function DevEnvironmentPage() {
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; url: string; type: string; size: number }>>([]);
   const [isUploading, setIsUploading] = useState(false);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Toggle between Claude (Sonnet) and Chad (Haiku)
-  const [chatMode, setChatMode] = useState<'claude' | 'chad'>('claude');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch projects on mount
