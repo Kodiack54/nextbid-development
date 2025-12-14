@@ -247,6 +247,11 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendInput();
+              } else if (e.key === 'Escape') {
+                // Send Escape character for TUI navigation
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b' }));
+                }
               }
             }}
             disabled={!connected}
