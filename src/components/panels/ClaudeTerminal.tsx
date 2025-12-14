@@ -86,16 +86,23 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     initTerminal();
 
-    // Handle resize
+    // Handle resize - both window and container
     const handleResize = () => {
       if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
+        setTimeout(() => fitAddonRef.current?.fit(), 100);
       }
     };
     window.addEventListener('resize', handleResize);
 
+    // ResizeObserver for container size changes
+    const resizeObserver = new ResizeObserver(handleResize);
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (xtermRef.current) {
         xtermRef.current.dispose();
         xtermRef.current = null;
@@ -260,8 +267,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Terminal output - xterm.js handles all the TUI rendering */}
       <div
         ref={terminalRef}
-        className="flex-1 min-h-0 overflow-hidden"
-        style={{ padding: '8px' }}
+        className="flex-1 min-h-0 overflow-auto"
+        style={{ padding: '8px', maxWidth: '100%' }}
       />
 
       {/* Input area - separate textarea since xterm keyboard wasn't working */}
