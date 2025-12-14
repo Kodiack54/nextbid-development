@@ -229,11 +229,15 @@ Let's build something great.`;
     const text = finalResponse.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
     const cost = calculateCost(model, totalIn, totalOut);
 
+    // Track which AI team member was used (from assistant_name param or derive from model)
+    const assistantName = body.assistant_name || (model.includes('haiku') ? 'chad' : 'claude');
+
     await supabase.from('dev_ai_usage').insert({
       user_id, project_id, model, input_tokens: totalIn, output_tokens: totalOut, cost_usd: cost,
       request_type: toolLog.length ? 'chat_with_tools' : 'chat',
       prompt_preview: typeof messages[messages.length - 1]?.content === 'string' ? messages[messages.length - 1].content.slice(0, 255) : 'Tool session',
       response_time_ms: Date.now() - startTime,
+      assistant_name: assistantName,
     });
 
     const content = toolLog.length ? text + '\n\n---\n*Tools: ' + toolLog.join(' > ') + '*' : text;

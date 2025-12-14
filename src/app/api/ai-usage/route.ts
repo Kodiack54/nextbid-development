@@ -86,6 +86,15 @@ export async function GET(request: NextRequest) {
     const byUser: Record<string, { name: string; requests: number; tokens: number; cost: number }> = {};
     const byProject: Record<string, { name: string; requests: number; tokens: number; cost: number }> = {};
     const byType: Record<string, { requests: number; tokens: number; cost: number }> = {};
+    const byAssistant: Record<string, { name: string; role: string; requests: number; tokens: number; cost: number }> = {};
+
+    // AI Team member info
+    const teamMembers: Record<string, { name: string; role: string; emoji: string }> = {
+      'claude': { name: 'Claude', role: 'Lead Programmer', emoji: '👨‍💻' },
+      'chad': { name: 'Chad', role: 'Assistant Dev', emoji: '🧑‍💻' },
+      'ryan': { name: 'Ryan', role: 'Runner', emoji: '🏃' },
+      'susan': { name: 'Susan', role: 'Librarian', emoji: '👩‍💼' },
+    };
 
     usage?.forEach((row) => {
       totals.input_tokens += row.input_tokens || 0;
@@ -120,6 +129,16 @@ export async function GET(request: NextRequest) {
       byType[requestType].requests++;
       byType[requestType].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
       byType[requestType].cost += parseFloat(row.cost_usd) || 0;
+
+      // Group by AI team member (assistant)
+      const assistantKey = row.assistant_name || (row.model?.includes('haiku') ? 'chad' : 'claude');
+      const member = teamMembers[assistantKey] || { name: assistantKey, role: 'Unknown', emoji: '🤖' };
+      if (!byAssistant[assistantKey]) {
+        byAssistant[assistantKey] = { name: member.name, role: member.role, requests: 0, tokens: 0, cost: 0 };
+      }
+      byAssistant[assistantKey].requests++;
+      byAssistant[assistantKey].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
+      byAssistant[assistantKey].cost += parseFloat(row.cost_usd) || 0;
     });
 
     const { data: budgets } = await supabase
@@ -155,6 +174,11 @@ export async function GET(request: NextRequest) {
       })),
       by_type: Object.entries(byType).map(([type, data]) => ({
         type,
+        ...data,
+        cost: Math.round(data.cost * 100) / 100,
+      })),
+      by_assistant: Object.entries(byAssistant).map(([key, data]) => ({
+        key,
         ...data,
         cost: Math.round(data.cost * 100) / 100,
       })),

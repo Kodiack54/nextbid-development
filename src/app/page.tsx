@@ -306,6 +306,7 @@ User: The Boss`;
           project_id: selectedProject?.id,
           model: model,
           system_prompt: systemPrompt,
+          assistant_name: chatMode, // 'claude' or 'chad' for tracking
         }),
       });
 
