@@ -143,13 +143,26 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
                 const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
 
                 // Skip lines that are just UI noise
-                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning)/.test(cleanLine);
+                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning|Cogitating)/.test(cleanLine);
                 const isShortcutHint = cleanLine === '? for shortcuts';
                 const isEmptyPrompt = /^>\s*$/.test(cleanLine);
                 const isDivider = /^[─]+$/.test(cleanLine);
+                const isThoughtLine = /^∴\s*Thought?\s*(for|\.\.\.)/i.test(cleanLine);
 
-                // Skip shortcut hints and empty dividers
+                // Claude's actual response starts with ● - ALWAYS keep these!
+                const isClaudeResponse = cleanLine.startsWith('●') || /^[●○◐◑]\s/.test(cleanLine);
+                if (isClaudeResponse) {
+                  newOutput.push(line);
+                  continue;
+                }
+
+                // Skip shortcut hints and empty prompts
                 if (isShortcutHint || isEmptyPrompt) {
+                  continue;
+                }
+
+                // Skip thought duration lines (we already saw thinking)
+                if (isThoughtLine) {
                   continue;
                 }
 
