@@ -547,7 +547,6 @@ User: The Boss`;
             <span className="text-xs px-2 py-1 bg-blue-600/20 text-blue-400 rounded">{user.role}</span>
           </div>
 
-          <ChatDropdown />
           <AITeamChat
             onSendToClaudeTerminal={(msg) => claudeSendRef.current?.(msg)}
             claudeConnected={claudeConnected}
@@ -559,6 +558,7 @@ User: The Boss`;
             userId={user?.id}
             userName={user?.name}
           />
+          <ChatDropdown />
           <TimeClockDropdown />
           <SettingsDropdown />
           <button
