@@ -127,7 +127,8 @@ export async function POST(request: NextRequest) {
       return res.json();
     }
 
-    // Sanitize messages - Anthropic API only accepts role and content\n    let currentMsgs = messages.map((m: any) => ({ role: m.role, content: m.content }));
+    // Sanitize messages - Anthropic API only accepts role and content
+    let currentMsgs = messages.map((m: any) => ({ role: m.role, content: m.content }));
     let finalResponse: any = null;
     let totalIn = 0, totalOut = 0;
     const toolLog: string[] = [];
