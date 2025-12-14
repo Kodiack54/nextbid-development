@@ -221,13 +221,22 @@ Items extracted from development conversations.
 }
 
 async function markSessionProcessed(sessionId: string) {
-  await supabase
-    .from('dev_chat_sessions')
-    .update({
-      doc_worker_processed: true,
-      doc_worker_processed_at: new Date().toISOString()
-    })
-    .eq('id', sessionId);
+  try {
+    const { error } = await supabase
+      .from('dev_chat_sessions')
+      .update({
+        doc_worker_processed: true,
+        doc_worker_processed_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+
+    if (error && error.message.includes('does not exist')) {
+      console.log('[DocWorker] Note: doc_worker_processed column not yet added to database');
+    }
+  } catch (e) {
+    // Column might not exist yet - that's OK
+    console.log('[DocWorker] Could not mark session processed (column may not exist yet)');
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -238,17 +247,43 @@ export async function POST(request: NextRequest) {
     const forceAll = body.force_all || false;
 
     // Get recent sessions that haven't been processed
-    const query = supabase
-      .from('dev_chat_sessions')
-      .select('id, project_id, user_id, started_at')
-      .order('started_at', { ascending: false })
-      .limit(10);
+    let sessions: any[] = [];
+    let sessionsError: any = null;
 
+    // First try with the doc_worker_processed filter (if column exists)
     if (!forceAll) {
-      query.or('doc_worker_processed.is.null,doc_worker_processed.eq.false');
-    }
+      const result = await supabase
+        .from('dev_chat_sessions')
+        .select('id, project_id, user_id, started_at')
+        .or('doc_worker_processed.is.null,doc_worker_processed.eq.false')
+        .order('started_at', { ascending: false })
+        .limit(10);
 
-    const { data: sessions, error: sessionsError } = await query;
+      if (result.error && result.error.message.includes('does not exist')) {
+        // Column doesn't exist yet - just get recent sessions
+        console.log('[DocWorker] Note: doc_worker_processed column not yet added, processing recent sessions');
+        const fallback = await supabase
+          .from('dev_chat_sessions')
+          .select('id, project_id, user_id, started_at')
+          .order('started_at', { ascending: false })
+          .limit(5); // Smaller limit when we can't track processed status
+
+        sessions = fallback.data || [];
+        sessionsError = fallback.error;
+      } else {
+        sessions = result.data || [];
+        sessionsError = result.error;
+      }
+    } else {
+      const result = await supabase
+        .from('dev_chat_sessions')
+        .select('id, project_id, user_id, started_at')
+        .order('started_at', { ascending: false })
+        .limit(10);
+
+      sessions = result.data || [];
+      sessionsError = result.error;
+    }
 
     if (sessionsError) {
       console.error('[DocWorker] Error fetching sessions:', sessionsError);
