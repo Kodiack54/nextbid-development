@@ -215,18 +215,20 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Output area */}
+      {/* Output area - horizontal scroll to preserve Claude Code's TUI layout */}
       <div
         ref={outputRef}
-        className="flex-1 min-h-0 overflow-auto p-3 font-mono text-sm bg-[#1a1b26] space-y-0.5"
+        className="flex-1 min-h-0 overflow-auto p-3 font-mono text-xs bg-[#1a1b26]"
       >
-        {output.map((line, i) => (
-          <div key={i} className="whitespace-pre-wrap break-all">
-            {parseAnsi(line).map((part, j) => (
-              <span key={j} className={part.color}>{part.text}</span>
-            ))}
-          </div>
-        ))}
+        <div className="min-w-[900px]">
+          {output.map((line, i) => (
+            <div key={i} className="whitespace-pre">
+              {parseAnsi(line).map((part, j) => (
+                <span key={j} className={part.color}>{part.text}</span>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Input area */}
