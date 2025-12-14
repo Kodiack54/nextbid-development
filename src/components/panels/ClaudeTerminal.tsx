@@ -28,6 +28,7 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     const term = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'block',
       fontSize: 13,
       fontFamily: '"Cascadia Code", "Fira Code", Consolas, monospace',
       theme: {
@@ -54,6 +55,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         brightWhite: '#acb0d0',
       },
       allowProposedApi: true,
+      disableStdin: false,
+      convertEol: true,
     });
 
     const fitAddon = new FitAddon();
@@ -67,6 +70,11 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
+
+    // Focus terminal after a short delay to ensure DOM is ready
+    setTimeout(() => {
+      term.focus();
+    }, 100);
 
     // Welcome message
     term.writeln('\x1b[1;36m╔════════════════════════════════════════════╗\x1b[0m');
@@ -140,6 +148,7 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       setConnected(true);
       setConnecting(false);
       xtermRef.current?.writeln('\x1b[32m[Connected]\x1b[0m Starting Claude Code...\r\n');
+      xtermRef.current?.writeln('\x1b[90mType "claude" to start your Claude Code session\x1b[0m\r\n');
 
       // Send initial resize
       if (xtermRef.current) {
@@ -148,8 +157,10 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
           cols: xtermRef.current.cols,
           rows: xtermRef.current.rows,
         }));
-        // Focus the terminal so user can type
+        // Focus the terminal so user can type - multiple attempts
         xtermRef.current.focus();
+        setTimeout(() => xtermRef.current?.focus(), 50);
+        setTimeout(() => xtermRef.current?.focus(), 200);
       }
     };
 
@@ -253,17 +264,23 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Terminal */}
+      {/* Terminal - click anywhere to focus */}
       <div
         ref={terminalRef}
-        tabIndex={0}
-        className="flex-1 p-1"
-        style={{ minHeight: '300px', outline: 'none' }}
-        onClick={() => {
+        tabIndex={-1}
+        className="flex-1 p-1 cursor-text"
+        style={{ minHeight: '300px' }}
+        onClick={(e) => {
+          e.preventDefault();
           xtermRef.current?.focus();
-          terminalRef.current?.focus();
         }}
-        onFocus={() => xtermRef.current?.focus()}
+        onMouseDown={(e) => {
+          // Prevent stealing focus from xterm's internal textarea
+          if (e.target === terminalRef.current) {
+            e.preventDefault();
+            xtermRef.current?.focus();
+          }
+        }}
       />
     </div>
   );
