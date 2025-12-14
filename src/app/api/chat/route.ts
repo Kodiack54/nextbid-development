@@ -15,13 +15,18 @@ const supabase = createClient(
 const PROJECTS_BASE_PATH = '/var/www/NextBid_Dev';
 const ALLOWED_COMMANDS = ['npm', 'npx', 'git', 'ls', 'cat', 'head', 'tail', 'grep', 'find', 'wc', 'pwd'];
 
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-  'claude-3-5-haiku-latest': { input: 0.80, output: 4.0 },  // 75% cheaper!
+const MODEL_PRICING: Record<string, { input: number; output: number; provider: 'anthropic' | 'openai' }> = {
+  // Anthropic models
+  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0, provider: 'anthropic' },
+  'claude-3-5-haiku-latest': { input: 0.80, output: 4.0, provider: 'anthropic' },
+  // OpenAI models - WAY cheaper for quick tasks
+  'gpt-4o-mini': { input: 0.15, output: 0.60, provider: 'openai' },
+  'gpt-4o': { input: 2.50, output: 10.0, provider: 'openai' },
+  'gpt-4-turbo': { input: 10.0, output: 30.0, provider: 'openai' },
 };
 
-// Use Haiku by default for cost savings (switch to sonnet for complex tasks)
-const DEFAULT_MODEL = 'claude-3-5-haiku-latest';
+// Use GPT-4o-mini by default for cost savings (20x cheaper than Haiku!)
+const DEFAULT_MODEL = 'gpt-4o-mini';
 const MAX_HISTORY_MESSAGES = 10; // Only send last 10 messages to reduce token usage
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
@@ -186,15 +191,53 @@ Let's build something great.`;
     const systemPrompt = system_prompt || defaultPrompt;
 
     const startTime = Date.now();
+    const provider = MODEL_PRICING[model]?.provider || 'anthropic';
+    const openaiKey = process.env.OPENAI_API_KEY;
 
-    async function callClaude(msgs: any[]) {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey!, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model, max_tokens: 4096, system: systemPrompt, messages: msgs, tools: TOOLS }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
+    // Call appropriate API based on provider
+    async function callLLM(msgs: any[]) {
+      if (provider === 'openai') {
+        if (!openaiKey) throw new Error('OpenAI API key not configured');
+
+        // Convert to OpenAI format
+        const openaiMsgs = [
+          { role: 'system', content: systemPrompt },
+          ...msgs.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }))
+        ];
+
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 4096,
+            messages: openaiMsgs
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        // Convert OpenAI response to Anthropic-like format
+        return {
+          content: [{ type: 'text', text: data.choices[0]?.message?.content || '' }],
+          usage: {
+            input_tokens: data.usage?.prompt_tokens || 0,
+            output_tokens: data.usage?.completion_tokens || 0,
+          }
+        };
+      } else {
+        // Anthropic API
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey!, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model, max_tokens: 4096, system: systemPrompt, messages: msgs, tools: TOOLS }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
     }
 
     // Sanitize and truncate messages to save tokens
@@ -208,10 +251,17 @@ Let's build something great.`;
     const toolLog: string[] = [];
 
     for (let i = 0; i < 5; i++) { // Reduced from 10 to 5 for cost savings
-      const response = await callClaude(currentMsgs);
+      const response = await callLLM(currentMsgs);
       totalIn += response.usage?.input_tokens || 0;
       totalOut += response.usage?.output_tokens || 0;
 
+      // OpenAI doesn't use tools in this simple setup, so just get the response
+      if (provider === 'openai') {
+        finalResponse = response;
+        break;
+      }
+
+      // Anthropic tool handling
       const toolBlocks = response.content.filter((b: any) => b.type === 'tool_use');
       if (!toolBlocks.length) { finalResponse = response; break; }
 

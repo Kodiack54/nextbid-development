@@ -90,7 +90,7 @@ export default function DevEnvironmentPage() {
     { role: 'assistant', content: "Hey Boss! I'm Claude, your Lead Programmer.\n\nI handle the complex stuff - architecture, deep problem solving, thorough code reviews. I use Sonnet so I'm smarter but cost a bit more.\n\nWhat are we building today?" }
   ]);
   const [chadMessages, setChadMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: "Yo! Chad here, Assistant Dev.\n\nI'm your quick helper - simple questions, fast fixes, looking stuff up. I use Haiku so I'm cheap and fast.\n\nWhat do you need?" }
+    { role: 'assistant', content: "Yo! Chad here, Assistant Dev.\n\nI'm your quick helper - simple questions, fast fixes, looking stuff up. I run on GPT-4o-mini so I'm basically free (~$0.001/msg).\n\nWhat do you need?" }
   ]);
 
   // Get current messages based on active chat mode
@@ -254,8 +254,8 @@ export default function DevEnvironmentPage() {
     try {
       const chatMessages = [...messages.slice(1), { role: 'user' as const, content: userMessage }];
 
-      // Claude mode uses Sonnet (smarter), Chad mode uses Haiku (faster/cheaper)
-      const model = chatMode === 'claude' ? 'claude-sonnet-4-20250514' : 'claude-3-5-haiku-latest';
+      // Claude uses Sonnet (smarter), Chad uses GPT-4o-mini (20x cheaper!)
+      const model = chatMode === 'claude' ? 'claude-sonnet-4-20250514' : 'gpt-4o-mini';
 
       // Different system prompts for Claude vs Chad - Kodiack AI Team
       const claudePrompt = `You are Claude, the LEAD PROGRAMMER at Kodiack Studios AI Team.
