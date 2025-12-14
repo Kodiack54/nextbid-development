@@ -22,6 +22,7 @@ import {
   SessionHubPanel,
   StorageMonitorPanel,
   ProjectManagerPanel,
+  DocsPanel,
 } from '../components/panels';
 
 // Hooks
@@ -427,6 +428,7 @@ export default function DevEnvironmentPage() {
               { id: 'hub', icon: '🎯', label: 'Session Hub' },
               { id: 'storage', icon: '💾', label: 'Storage' },
               { id: 'projects', icon: '⚙️', label: 'Projects' },
+              { id: 'docs', icon: '📝', label: 'Docs' },
             ]}
             activePanel={activePanel}
             onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
@@ -443,7 +445,7 @@ export default function DevEnvironmentPage() {
 
         {/* Pop-out Panel - Overlay */}
         {activePanel && (
-          <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "projects" ? "w-[480px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
+          <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "projects" || activePanel === "docs" ? "w-[600px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
             <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
               <span className="text-sm font-medium text-white flex items-center gap-2">
                 {activePanel === 'files' && '📁 File Manager'}
@@ -487,6 +489,7 @@ export default function DevEnvironmentPage() {
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}
               {activePanel === 'projects' && <ProjectManagerPanel onProjectsChange={fetchProjects} />}
+              {activePanel === 'docs' && <DocsPanel />}
             </div>
           </div>
         )}

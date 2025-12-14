@@ -8,3 +8,4 @@ export { ChatLogPanel } from './ChatLogPanel';
 export { SessionHubPanel } from './SessionHubPanel';
 export { StorageMonitorPanel } from './StorageMonitorPanel';
 export { ProjectManagerPanel } from './ProjectManagerPanel';
+export { DocsPanel } from './DocsPanel';

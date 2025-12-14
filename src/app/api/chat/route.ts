@@ -94,6 +94,44 @@ async function executeTool(toolName: string, toolInput: any, projectPath: string
           return out.length > 10000 ? out.slice(0, 10000) + '\n[truncated]' : out;
         } catch (e: any) { return 'Error: ' + e.message; }
       }
+            case 'run_tests': {
+        try {
+          const testCmd = toolInput.test_pattern ? 'npm test -- ' + toolInput.test_pattern : 'npm test';
+          const { stdout, stderr } = await execAsync(testCmd, { cwd: projectPath, timeout: 120000 });
+          return (stdout || stderr || 'Tests completed').slice(0, 15000);
+        } catch (e: any) { return e.stdout || e.stderr || 'Test error: ' + e.message; }
+      }
+      case 'create_document': {
+        const res = await fetch('http://localhost:5000/api/scribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', project_path: projectPath, title: toolInput.title, category: toolInput.category, content: toolInput.content, author: 'Chad' }),
+        });
+        const r = await res.json();
+        return r.success ? 'Created: ' + r.path + ' (' + r.words + ' words, v' + r.version + ')' : 'Error: ' + r.error;
+      }
+      case 'update_document': {
+        const res = await fetch('http://localhost:5000/api/scribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: toolInput.action, project_path: projectPath, title: toolInput.title, category: toolInput.category, content: toolInput.content, section: toolInput.section, author: 'Chad' }),
+        });
+        const r = await res.json();
+        return r.success ? r.action + ': ' + r.path + ' (' + r.words + ' words, v' + r.version + ')' : 'Error: ' + r.error;
+      }
+      case 'read_document': {
+        const docPath = path.join(projectPath, 'docs', toolInput.doc_path);
+        try {
+          const doc = await fs.readFile(docPath, 'utf-8');
+          const body = doc.match(/^---[\s\S]*?---\n([\s\S]*)$/);
+          return body ? body[1] : doc;
+        } catch { return 'Not found: ' + toolInput.doc_path; }
+      }
+      case 'list_documents': {
+        const res = await fetch('http://localhost:5000/api/docs');
+        const r = await res.json();
+        if (!r.success) return 'Error listing docs';
+        const fmt = (items, d=0) => items.map(i => '  '.repeat(d) + (i.type==='folder' ? '📁 '+i.name+'/' : '📄 '+i.name) + (i.children ? '\n'+fmt(i.children,d+1) : '')).join('\n');
+        return r.docs.length ? fmt(r.docs) : 'No docs yet';
+      }
       default: return 'Unknown tool: ' + toolName;
     }
   } catch (e: any) { return 'Tool error: ' + e.message; }
