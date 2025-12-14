@@ -204,7 +204,7 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Output area */}
       <div
         ref={outputRef}
-        className="flex-1 overflow-auto p-3 font-mono text-sm bg-[#1a1b26] space-y-0.5"
+        className="flex-1 min-h-0 overflow-auto p-3 font-mono text-sm bg-[#1a1b26] space-y-0.5"
       >
         {output.map((line, i) => (
           <div key={i} className="whitespace-pre-wrap break-all">
@@ -216,23 +216,28 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       </div>
 
       {/* Input area */}
-      <div className="p-2 bg-gray-800 border-t border-gray-700">
+      <div className="shrink-0 p-2 bg-gray-800 border-t border-gray-700">
         <div className="flex gap-2">
-          <span className="text-orange-400 font-mono text-sm py-2">$</span>
-          <input
-            ref={inputRef}
-            type="text"
+          <span className="text-orange-400 font-mono text-sm pt-2">$</span>
+          <textarea
+            ref={inputRef as any}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendInput();
+              }
+            }}
             disabled={!connected}
-            placeholder={connected ? 'Type command and press Enter...' : 'Click Connect first'}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50"
+            placeholder={connected ? 'Type command and press Enter (Shift+Enter for new line)...' : 'Click Connect first'}
+            rows={4}
+            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50 resize-none"
           />
           <button
             onClick={sendInput}
             disabled={!connected}
-            className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded text-sm"
+            className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded text-sm self-end"
           >
             Send
           </button>
