@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Power, PowerOff, FolderOpen } from 'lucide-react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 interface ClaudeTerminalProps {
   projectPath?: string;
@@ -10,70 +13,84 @@ interface ClaudeTerminalProps {
 
 export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-5000', wsUrl }: ClaudeTerminalProps) {
   const wsRef = useRef<WebSocket | null>(null);
-  const outputRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [output, setOutput] = useState<string[]>([
-    '\x1b[36m═══════════════════════════════════════════\x1b[0m',
-    '\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m',
-    '\x1b[36m═══════════════════════════════════════════\x1b[0m',
-    '',
-    '\x1b[33mClick "Connect" to summon your Lead Programmer\x1b[0m',
-    '\x1b[90mUses your $200/mo subscription - no API costs\x1b[0m',
-    '',
-  ]);
   const [inputValue, setInputValue] = useState('');
 
-  // Auto-scroll output
+  // Initialize xterm.js
   useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [output]);
+    if (!terminalRef.current || xtermRef.current) return;
 
-  // Strip ANSI codes for display (simple version)
-  const stripAnsi = (str: string) => {
-    return str.replace(/\x1b\[[0-9;]*m/g, '');
-  };
+    const term = new Terminal({
+      theme: {
+        background: '#1a1b26',
+        foreground: '#c0caf5',
+        cursor: '#c0caf5',
+        cursorAccent: '#1a1b26',
+        black: '#15161e',
+        red: '#f7768e',
+        green: '#9ece6a',
+        yellow: '#e0af68',
+        blue: '#7aa2f7',
+        magenta: '#bb9af7',
+        cyan: '#7dcfff',
+        white: '#a9b1d6',
+        brightBlack: '#414868',
+        brightRed: '#f7768e',
+        brightGreen: '#9ece6a',
+        brightYellow: '#e0af68',
+        brightBlue: '#7aa2f7',
+        brightMagenta: '#bb9af7',
+        brightCyan: '#7dcfff',
+        brightWhite: '#c0caf5',
+      },
+      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+      fontSize: 13,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: 5000,
+      convertEol: true,
+    });
 
-  // Parse ANSI to styled spans
-  const parseAnsi = (text: string) => {
-    const parts: { text: string; color: string }[] = [];
-    let currentColor = 'text-gray-300';
-    let remaining = text;
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
 
-    const colorMap: Record<string, string> = {
-      '30': 'text-gray-800', '31': 'text-red-400', '32': 'text-green-400',
-      '33': 'text-yellow-400', '34': 'text-blue-400', '35': 'text-purple-400',
-      '36': 'text-cyan-400', '37': 'text-gray-300', '90': 'text-gray-500',
-      '91': 'text-red-300', '92': 'text-green-300', '93': 'text-yellow-300',
-      '94': 'text-blue-300', '95': 'text-purple-300', '96': 'text-cyan-300',
-      '0': 'text-gray-300',
+    term.open(terminalRef.current);
+    fitAddon.fit();
+
+    // Welcome message
+    term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
+    term.writeln('\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m');
+    term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[33mClick "Connect" to summon your Lead Programmer\x1b[0m');
+    term.writeln('\x1b[90mUses your $200/mo subscription - no API costs\x1b[0m');
+    term.writeln('');
+
+    xtermRef.current = term;
+    fitAddonRef.current = fitAddon;
+
+    // Handle resize
+    const handleResize = () => {
+      if (fitAddonRef.current) {
+        fitAddonRef.current.fit();
+      }
     };
+    window.addEventListener('resize', handleResize);
 
-    const regex = /\x1b\[([0-9;]+)m/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(remaining)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ text: remaining.slice(lastIndex, match.index), color: currentColor });
-      }
-      const codes = match[1].split(';');
-      for (const code of codes) {
-        if (colorMap[code]) currentColor = colorMap[code];
-      }
-      lastIndex = regex.lastIndex;
-    }
-
-    if (lastIndex < remaining.length) {
-      parts.push({ text: remaining.slice(lastIndex), color: currentColor });
-    }
-
-    return parts.length ? parts : [{ text, color: currentColor }];
-  };
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      term.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, []);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -89,14 +106,23 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     ws.onopen = () => {
       setConnected(true);
       setConnecting(false);
-      setOutput(prev => [...prev,
-        '\x1b[32m[Connected]\x1b[0m',
-        '',
-        '\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m',
-        '\x1b[90m   Starting Claude Code...\x1b[0m',
-        ''
-      ]);
-      ws.send(JSON.stringify({ type: 'resize', cols: 120, rows: 30 }));
+
+      if (xtermRef.current) {
+        xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
+        xtermRef.current.writeln('');
+        xtermRef.current.writeln('\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m');
+        xtermRef.current.writeln('\x1b[90m   Starting Claude Code...\x1b[0m');
+        xtermRef.current.writeln('');
+      }
+
+      // Send terminal size
+      if (fitAddonRef.current && xtermRef.current) {
+        ws.send(JSON.stringify({
+          type: 'resize',
+          cols: xtermRef.current.cols,
+          rows: xtermRef.current.rows
+        }));
+      }
 
       // Auto-start Claude after 2 seconds
       setTimeout(() => {
@@ -111,101 +137,35 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'output') {
-          // Debug: log raw data to see what's coming through
-          console.log('[ClaudeTerminal] Raw output:', JSON.stringify(msg.data).slice(0, 200));
-
-          // Filter out terminal control sequences we don't need
-          let data = msg.data;
-          // Remove bracketed paste mode sequences
-          data = data.replace(/\x1b\[\?2004[hl]/g, '');
-          // Remove window title sequences
-          data = data.replace(/\x1b\]0;[^\x07]*\x07/g, '');
-          // Remove cursor movement/clear line sequences
-          data = data.replace(/\x1b\[[0-9]*[ABCDJKGH]/g, '');
-          data = data.replace(/\x1b\[[0-9;]*[suhl]/g, '');
-          // Remove other common control sequences
-          data = data.replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
-
-          // Simple approach: only keep meaningful content, skip TUI noise
-          const lines = data.split(/[\r\n]+/).filter((l: string) => l.length > 0);
-
-          setOutput(prev => {
-            const newOutput = [...prev];
-
-            for (const line of lines) {
-              const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '').trim();
-
-              // Skip empty lines after cleaning
-              if (!cleanLine) continue;
-
-              // === KEEP: Actual Claude responses (● prefix) ===
-              if (/^●/.test(cleanLine)) {
-                newOutput.push('\x1b[97m' + cleanLine + '\x1b[0m');
-                continue;
-              }
-
-              // === KEEP: User input prompts with content ===
-              if (/^>\s*.+/.test(cleanLine) && !/^>\s*$/.test(cleanLine)) {
-                newOutput.push('\x1b[94m' + cleanLine + '\x1b[0m');
-                continue;
-              }
-
-              // === KEEP: Connection messages ===
-              if (cleanLine.includes('[Dev Studio Terminal]') || cleanLine.includes('[Connected]') || cleanLine.includes('[Disconnected]')) {
-                newOutput.push(line);
-                continue;
-              }
-
-              // === KEEP: Claude Code welcome box (first time only) ===
-              if (cleanLine.includes('Welcome') && cleanLine.includes('Michael')) {
-                newOutput.push(line);
-                continue;
-              }
-
-              // === KEEP: Error messages ===
-              if (/error|failed|exception/i.test(cleanLine)) {
-                newOutput.push('\x1b[91m' + cleanLine + '\x1b[0m');
-                continue;
-              }
-
-              // === UPDATE: Status spinner (just one line) ===
-              if (/^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning|Cogitating)/i.test(cleanLine)) {
-                // Find and update existing status line, or add new one
-                const statusIdx = newOutput.findIndex(l =>
-                  /Musing|Thinking|Working|Churning|Cogitating/i.test(l.replace(/\x1b\[[0-9;]*m/g, ''))
-                );
-                if (statusIdx >= 0) {
-                  newOutput[statusIdx] = '\x1b[33m⏳ ' + cleanLine + '\x1b[0m';
-                } else {
-                  newOutput.push('\x1b[33m⏳ ' + cleanLine + '\x1b[0m');
-                }
-                continue;
-              }
-
-              // Skip everything else (dividers, shortcuts, prompts, etc.)
-            }
-
-            return newOutput;
-          });
+        if (msg.type === 'output' && xtermRef.current) {
+          // Write directly to xterm - it handles all escape codes natively!
+          xtermRef.current.write(msg.data);
         } else if (msg.type === 'exit') {
-          setOutput(prev => [...prev, `\x1b[33m[Process exited: ${msg.code}]\x1b[0m`]);
+          if (xtermRef.current) {
+            xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
+          }
           setConnected(false);
         }
       } catch {
-        setOutput(prev => [...prev, event.data]);
+        if (xtermRef.current) {
+          xtermRef.current.write(event.data);
+        }
       }
     };
 
     ws.onerror = () => {
-      setOutput(prev => [...prev, '\x1b[31m[Connection error]\x1b[0m']);
+      if (xtermRef.current) {
+        xtermRef.current.writeln('\x1b[31m[Connection error]\x1b[0m');
+      }
       setConnecting(false);
     };
 
     ws.onclose = () => {
       setConnected(false);
       setConnecting(false);
-      setOutput(prev => [...prev, '\x1b[33m[Disconnected]\x1b[0m']);
+      if (xtermRef.current) {
+        xtermRef.current.writeln('\x1b[33m[Disconnected]\x1b[0m');
+      }
     };
 
     wsRef.current = ws;
@@ -239,12 +199,6 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       console.log('[ClaudeTerminal] WebSocket not open');
     }
   }, [inputValue, connected]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      sendInput();
-    }
-  };
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
@@ -291,28 +245,19 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Output area - horizontal scroll to preserve Claude Code's TUI layout */}
+      {/* Terminal output - xterm.js handles all the TUI rendering */}
       <div
-        ref={outputRef}
-        className="flex-1 min-h-0 overflow-auto p-3 font-mono text-xs bg-[#1a1b26]"
-      >
-        <div className="min-w-[900px]">
-          {output.map((line, i) => (
-            <div key={i} className="whitespace-pre">
-              {parseAnsi(line).map((part, j) => (
-                <span key={j} className={part.color}>{part.text}</span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+        ref={terminalRef}
+        className="flex-1 min-h-0 overflow-hidden"
+        style={{ padding: '8px' }}
+      />
 
-      {/* Input area */}
+      {/* Input area - separate textarea since xterm keyboard wasn't working */}
       <div className="shrink-0 p-2 bg-gray-800 border-t border-gray-700">
         <div className="flex gap-2">
           <span className="text-orange-400 font-mono text-sm pt-2">$</span>
           <textarea
-            ref={inputRef as any}
+            ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
@@ -328,7 +273,7 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
             }}
             disabled={!connected}
             placeholder={connected ? 'Type command and press Enter (Shift+Enter for new line)...' : 'Click Connect first'}
-            rows={4}
+            rows={3}
             className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50 resize-none"
           />
           <button
