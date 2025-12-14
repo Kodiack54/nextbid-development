@@ -160,8 +160,14 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input:', inputValue);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('[ClaudeTerminal] Sending:', inputValue);
-      // Use \r (carriage return) for Enter - required for TUI prompts
-      wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\r' }));
+      // Send text, then Escape (exit edit mode), then Enter (submit)
+      // This is how Claude Code's TUI works
+      if (inputValue.trim()) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\x1b\r' }));
+      } else {
+        // Just send Enter for empty input (confirmations, etc.)
+        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+      }
       setInputValue('');
     } else {
       console.log('[ClaudeTerminal] WebSocket not open');
