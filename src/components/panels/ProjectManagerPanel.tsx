@@ -6,9 +6,10 @@ import { Project } from '../../types';
 
 interface ProjectManagerPanelProps {
   onSelectProject?: (project: Project) => void;
+  onProjectsChange?: () => void;
 }
 
-export function ProjectManagerPanel({ onSelectProject }: ProjectManagerPanelProps) {
+export function ProjectManagerPanel({ onSelectProject, onProjectsChange }: ProjectManagerPanelProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export function ProjectManagerPanel({ onSelectProject }: ProjectManagerPanelProp
 
       const data = await res.json();
       if (data.success) {
-        await loadProjects();
+        await loadProjects(); onProjectsChange?.();
         setEditingId(null);
         setShowAddForm(false);
         setFormData({});
@@ -102,7 +103,7 @@ export function ProjectManagerPanel({ onSelectProject }: ProjectManagerPanelProp
       const res = await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        await loadProjects();
+        await loadProjects(); onProjectsChange?.();
       } else {
         alert(data.error || 'Failed to delete');
       }
