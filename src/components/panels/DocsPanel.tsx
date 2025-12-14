@@ -219,18 +219,19 @@ export function DocsPanel({ projectPath, workerStatus, onTriggerWorker }: DocsPa
           {workerStatus && (
             <button
               onClick={onTriggerWorker}
-              className={`px-2 py-1 text-xs rounded ${
+              className={`px-2 py-1 text-xs rounded flex items-center gap-1 ${
                 workerStatus === 'running'
                   ? 'bg-yellow-600/20 text-yellow-400'
                   : workerStatus === 'success'
                   ? 'bg-green-600/20 text-green-400'
                   : workerStatus === 'error'
                   ? 'bg-red-600/20 text-red-400'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-purple-700/30 text-purple-300 hover:bg-purple-600/30'
               }`}
-              title="Auto-doc worker (runs every 5 min)"
+              title="Susan - Librarian AI (auto-documents every 5 min)"
             >
-              {workerStatus === 'running' ? 'Working...' : 'Auto-Doc'}
+              <span>👩‍💼</span>
+              {workerStatus === 'running' ? 'Susan working...' : 'Susan'}
             </button>
           )}
           <button
@@ -254,7 +255,8 @@ export function DocsPanel({ projectPath, workerStatus, onTriggerWorker }: DocsPa
         <div className="p-4 text-center text-gray-500">
           <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>No documents yet</p>
-          <p className="text-sm mt-2">Ask Chad to create documentation</p>
+          <p className="text-sm mt-2">Susan will auto-document your conversations</p>
+          <p className="text-xs mt-1 text-gray-600">Or ask Claude/Chad to create docs</p>
         </div>
       ) : (
         <div className="flex-1 flex overflow-hidden">

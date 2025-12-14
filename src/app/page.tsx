@@ -84,7 +84,7 @@ export default function DevEnvironmentPage() {
 
   // Chat state - shared between Claude and Chad modes
   const [localMessages, setLocalMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Hello! Select a project to get started, then ask me anything about your code.\n\n**Claude** (Sonnet) - Smarter, better for complex tasks\n**Chad** (Haiku) - Faster & cheaper, great for quick questions' }
+    { role: 'assistant', content: 'Welcome to Kodiack Studios AI Team!\n\n**Claude** - Lead Programmer (Sonnet)\n*Complex coding, architecture, deep problem solving*\n\n**Chad** - Assistant Dev (Haiku)\n*Quick questions, simple fixes, fast & cheap*\n\nSelect a project to get started!' }
   ]);
   const messages = sessionMessages.length > 0 ? sessionMessages : localMessages;
 
@@ -251,35 +251,49 @@ export default function DevEnvironmentPage() {
       // Claude mode uses Sonnet (smarter), Chad mode uses Haiku (faster/cheaper)
       const model = chatMode === 'claude' ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022';
 
-      // Different system prompts for Claude vs Chad
-      const claudePrompt = `You are Claude, an expert AI coding assistant from Anthropic.
+      // Different system prompts for Claude vs Chad - Kodiack AI Team
+      const claudePrompt = `You are Claude, the LEAD PROGRAMMER at Kodiack Studios AI Team.
 
-You help developers at Kodiack Studios build great software. You have access to tools to read/write files, search code, query the database, and run commands.
-
-APPROACH:
-- Think step by step before acting
-- Read actual code to understand context before making changes
-- Be thorough but concise in explanations
-- If unsure about requirements, ask for clarification
-
-Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}`;
-
-      const chadPrompt = `You are Chad, lead developer at Kodiack Studios.
+ROLE: Senior architect and problem solver. The boss calls on you for complex work.
 
 PERSONALITY:
-- Amazing coder and problem solver - confident but never arrogant
-- Easy going and chill, but serious about your work
-- You LISTEN to instructions and follow them precisely
-- You NEVER guess - if unsure, ask the boss (user) to clarify
-- Proactive - look at actual code and data, don't just theorize
+- Thoughtful and thorough - you think before you code
+- Confident in your expertise but always learning
+- You take ownership of problems and see them through
+- You explain your reasoning so others can learn
 
-RULES:
-1. USE TOOLS to look at actual code before answering questions
-2. If not 100% sure what the user wants, ASK
-3. Be direct and concise - no fluff
-4. Explain briefly what you did after making changes
+APPROACH:
+- Analyze the full picture before diving in
+- Read actual code to understand context
+- Consider edge cases and potential issues
+- Write clean, maintainable code
+- If requirements are unclear, ask for clarification
 
-Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}`;
+You have tools: read_file, write_file, list_files, search_files, query_database, run_command
+
+Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}
+User: The Boss`;
+
+      const chadPrompt = `You are Chad, ASSISTANT DEVELOPER at Kodiack Studios AI Team.
+
+ROLE: Quick helper for simple tasks. Fast, efficient, gets stuff done.
+
+PERSONALITY:
+- Chill and easy-going but focused
+- No BS - you get straight to the point
+- Happy to help with the quick stuff
+- You know when to escalate to Claude for complex work
+
+APPROACH:
+- Be fast and concise
+- Handle simple questions quickly
+- Use tools to check actual code when needed
+- If something seems complex, suggest asking Claude instead
+
+You have tools: read_file, write_file, list_files, search_files, query_database, run_command
+
+Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}
+User: The Boss`;
 
       const systemPrompt = chatMode === 'claude' ? claudePrompt : chadPrompt;
 
@@ -622,7 +636,7 @@ Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000
 
             {/* Claude Code Terminal / Chad Chat - 1/3 */}
             <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
-              {/* Mode Toggle Header */}
+              {/* AI Team Toggle Header */}
               <div className="flex items-center border-b border-gray-700 bg-gray-800">
                 <button
                   onClick={() => setChatMode('claude')}
@@ -632,7 +646,8 @@ Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  🧠 Claude (Sonnet)
+                  <span className="text-base">👨‍💻</span> Claude
+                  <span className="text-xs ml-1 opacity-60">Lead</span>
                 </button>
                 <button
                   onClick={() => setChatMode('chad')}
@@ -642,7 +657,8 @@ Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  ⚡ Chad (Haiku)
+                  <span className="text-base">🧑‍💻</span> Chad
+                  <span className="text-xs ml-1 opacity-60">Asst</span>
                 </button>
               </div>
 
