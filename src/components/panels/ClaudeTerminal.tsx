@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Terminal, Power, PowerOff, FolderOpen } from 'lucide-react';
+import { Power, PowerOff, FolderOpen } from 'lucide-react';
 
 interface ClaudeTerminalProps {
   projectPath?: string;
@@ -17,11 +17,11 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
   const [connecting, setConnecting] = useState(false);
   const [output, setOutput] = useState<string[]>([
     '\x1b[36m═══════════════════════════════════════════\x1b[0m',
-    '\x1b[36m    Claude Code Terminal (Subscription)    \x1b[0m',
+    '\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m',
     '\x1b[36m═══════════════════════════════════════════\x1b[0m',
     '',
-    '\x1b[33mClick "Connect" then type commands below\x1b[0m',
-    `\x1b[90mProject: ${projectPath}\x1b[0m`,
+    '\x1b[33mClick "Connect" to summon your Lead Programmer\x1b[0m',
+    '\x1b[90mUses your $200/mo subscription - no API costs\x1b[0m',
     '',
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -89,8 +89,22 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     ws.onopen = () => {
       setConnected(true);
       setConnecting(false);
-      setOutput(prev => [...prev, '\x1b[32m[Connected]\x1b[0m Type "claude" to start Claude Code', '']);
+      setOutput(prev => [...prev,
+        '\x1b[32m[Connected]\x1b[0m',
+        '',
+        '\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m',
+        '\x1b[90m   Starting Claude Code...\x1b[0m',
+        ''
+      ]);
       ws.send(JSON.stringify({ type: 'resize', cols: 120, rows: 30 }));
+
+      // Auto-start Claude after 2 seconds
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', data: 'claude\n' }));
+        }
+      }, 2000);
+
       inputRef.current?.focus();
     };
 
@@ -161,9 +175,9 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-orange-400" />
-          <span className="text-sm font-medium text-white">Claude Code</span>
-          <span className="text-xs text-orange-400/60">(Subscription)</span>
+          <span className="text-base">👨‍💻</span>
+          <span className="text-sm font-medium text-white">Claude</span>
+          <span className="text-xs text-orange-400/60">Lead Programmer</span>
           <span className={`px-1.5 py-0.5 text-xs rounded ${
             connected ? 'bg-green-600/20 text-green-400' :
             connecting ? 'bg-yellow-600/20 text-yellow-400' :
