@@ -664,7 +664,7 @@ User: The Boss`;
 
               {/* Claude = Terminal (subscription), Chad = Chat (API) */}
               {chatMode === 'claude' ? (
-                <ClaudeTerminal /> {/* Always uses dev-studio-5000 path */}
+                <ClaudeTerminal />
               ) : (
                 <>
                 <div className="flex-1 overflow-auto p-3 space-y-3">
