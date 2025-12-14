@@ -28,6 +28,12 @@ export interface Project {
   dev_server_started_by?: string;
   dev_server_error?: string;
   pm2_process_name?: string;
+  // Project metadata
+  git_repo?: string;
+  logo_url?: string;
+  created_at?: string;
+  sort_order?: number;
+  is_active?: boolean;
 }
 
 export interface Environment {
