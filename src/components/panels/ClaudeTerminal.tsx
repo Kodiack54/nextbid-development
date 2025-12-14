@@ -26,9 +26,6 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     const { FitAddon } = await import('@xterm/addon-fit');
     const { WebLinksAddon } = await import('@xterm/addon-web-links');
 
-    // Import CSS
-    await import('@xterm/xterm/css/xterm.css');
-
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
