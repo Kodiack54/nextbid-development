@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Clock } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase'
 
 interface TimePunch {
   id: string
