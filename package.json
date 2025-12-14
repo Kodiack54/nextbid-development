@@ -1,14 +1,15 @@
 {
-  "name": "nextbid-dev-environment",
+  "name": "dev-studio-5000",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 7501",
+    "dev": "next dev -p 5000",
     "build": "next build",
-    "start": "next start -p 7501",
+    "start": "next start -p 5000",
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@supabase/supabase-js": "^2.47.10",
     "lucide-react": "^0.561.0",
     "next": "^15.1.0",

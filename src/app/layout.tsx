@@ -3,8 +3,12 @@ import './globals.css';
 import { UserProvider } from './contexts/UserContext';
 
 export const metadata: Metadata = {
-  title: 'NextBid Dev Environment',
+  title: 'Dev Studio - NextBid',
   description: 'Development environment with Claude AI',
+  icons: {
+    icon: '/images/nextbid-logo.png',
+    apple: '/images/nextbid-logo.png',
+  },
 };
 
 export default function RootLayout({

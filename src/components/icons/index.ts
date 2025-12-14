@@ -1,0 +1,1 @@
+export { SupabaseLogo } from './SupabaseLogo';

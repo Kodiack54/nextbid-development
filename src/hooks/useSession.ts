@@ -54,12 +54,35 @@ export function useSession(): UseSessionReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Start a new session
+  // Resume existing active session or start a new one
   const startSession = useCallback(async (userId: string, projectId?: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
+      // First, check for existing active session
+      const checkRes = await fetch(`/api/sessions?user_id=${userId}&status=active&limit=1`);
+      const checkData = await checkRes.json();
+
+      if (checkData.success && checkData.sessions?.length > 0) {
+        // Found active session - load it with messages
+        const activeSession = checkData.sessions[0];
+        setSession(activeSession);
+
+        // Fetch messages for this session
+        const messagesRes = await fetch(`/api/sessions/messages?session_id=${activeSession.id}`);
+        const messagesData = await messagesRes.json();
+
+        if (messagesData.success) {
+          setMessages(messagesData.messages || []);
+        }
+
+        console.log('[Session] Resumed active session:', activeSession.id);
+        setIsLoading(false);
+        return;
+      }
+
+      // No active session - create a new one
       const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,6 +97,7 @@ export function useSession(): UseSessionReturn {
       if (data.success) {
         setSession(data.session);
         setMessages([]);
+        console.log('[Session] Created new session:', data.session.id);
       } else {
         setError(data.error || 'Failed to start session');
       }
