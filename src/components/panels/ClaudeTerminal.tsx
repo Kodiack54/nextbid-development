@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Power, PowerOff, FolderOpen } from 'lucide-react';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 interface ClaudeTerminalProps {
   projectPath?: string;
@@ -29,9 +30,6 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     const initTerminal = async () => {
       const { Terminal } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
-
-      // Import CSS
-      await import('@xterm/xterm/css/xterm.css');
 
       const term = new Terminal({
         theme: {
