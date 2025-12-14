@@ -7,3 +7,4 @@ export { SchemaPanel } from './SchemaPanel';
 export { ChatLogPanel } from './ChatLogPanel';
 export { SessionHubPanel } from './SessionHubPanel';
 export { StorageMonitorPanel } from './StorageMonitorPanel';
+export { ProjectManagerPanel } from './ProjectManagerPanel';

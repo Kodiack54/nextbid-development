@@ -142,3 +142,69 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+/**
+ * PATCH /api/projects
+ * Update an existing project
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
+    }
+
+    delete updates.created_at;
+    delete updates.lock;
+    delete updates.is_locked;
+
+    const { data: project, error } = await supabase
+      .from('dev_projects')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating project:', error);
+      return NextResponse.json({ error: 'Failed to update project' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, project });
+  } catch (error) {
+    console.error('Error in projects PATCH:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/projects
+ * Soft delete a project
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('dev_projects')
+      .update({ is_active: false })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting project:', error);
+      return NextResponse.json({ error: 'Failed to delete project' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error in projects DELETE:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

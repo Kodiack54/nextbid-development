@@ -68,7 +68,7 @@ export interface Session {
   started_at: string;
 }
 
-export type PanelType = 'files' | 'terminal' | 'ai-usage' | 'browser' | 'schema' | 'chatlog' | 'hub' | 'storage' | null;
+export type PanelType = 'files' | 'terminal' | 'ai-usage' | 'browser' | 'schema' | 'chatlog' | 'hub' | 'storage' | 'projects' | null;
 
 export const ENVIRONMENTS: Environment[] = [
   { id: 'dev', name: 'Development', portKey: 'port_dev' },

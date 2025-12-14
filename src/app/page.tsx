@@ -21,6 +21,7 @@ import {
   ChatLogPanel,
   SessionHubPanel,
   StorageMonitorPanel,
+  ProjectManagerPanel,
 } from '../components/panels';
 
 // Hooks
@@ -425,6 +426,7 @@ export default function DevEnvironmentPage() {
               { id: 'chatlog', icon: '📜', label: 'Chat Log' },
               { id: 'hub', icon: '🎯', label: 'Session Hub' },
               { id: 'storage', icon: '💾', label: 'Storage' },
+              { id: 'projects', icon: '⚙️', label: 'Projects' },
             ]}
             activePanel={activePanel}
             onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
@@ -451,6 +453,7 @@ export default function DevEnvironmentPage() {
                 {activePanel === 'schema' && <><SupabaseLogo /> DB Schema</>}
                 {activePanel === 'chatlog' && '📜 Chat Log'}
                 {activePanel === 'hub' && '🎯 Session Hub'}
+                {activePanel === 'projects' && '📋 Project Manager'}
                 {activePanel === 'storage' && '💾 Storage Monitor'}
               </span>
               <button onClick={() => setActivePanel(null)} className="text-gray-500 hover:text-white">
@@ -483,6 +486,7 @@ export default function DevEnvironmentPage() {
                 />
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}
+              {activePanel === 'projects' && <ProjectManagerPanel />}
             </div>
           </div>
         )}
