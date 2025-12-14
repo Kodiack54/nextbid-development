@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Power, PowerOff, FolderOpen } from 'lucide-react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 
 interface ClaudeTerminalProps {
   projectPath?: string;
@@ -22,59 +21,72 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
   const [connecting, setConnecting] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
-  // Initialize xterm.js
+  // Initialize xterm.js - dynamically import to avoid SSR issues
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
-    const term = new Terminal({
-      theme: {
-        background: '#1a1b26',
-        foreground: '#c0caf5',
-        cursor: '#c0caf5',
-        cursorAccent: '#1a1b26',
-        black: '#15161e',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#bb9af7',
-        cyan: '#7dcfff',
-        white: '#a9b1d6',
-        brightBlack: '#414868',
-        brightRed: '#f7768e',
-        brightGreen: '#9ece6a',
-        brightYellow: '#e0af68',
-        brightBlue: '#7aa2f7',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#7dcfff',
-        brightWhite: '#c0caf5',
-      },
-      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-      fontSize: 13,
-      lineHeight: 1.2,
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 5000,
-      convertEol: true,
-    });
+    // Dynamic import for client-side only
+    const initTerminal = async () => {
+      const { Terminal } = await import('@xterm/xterm');
+      const { FitAddon } = await import('@xterm/addon-fit');
 
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
+      // Import CSS
+      await import('@xterm/xterm/css/xterm.css');
 
-    term.open(terminalRef.current);
-    fitAddon.fit();
+      const term = new Terminal({
+        theme: {
+          background: '#1a1b26',
+          foreground: '#c0caf5',
+          cursor: '#c0caf5',
+          cursorAccent: '#1a1b26',
+          black: '#15161e',
+          red: '#f7768e',
+          green: '#9ece6a',
+          yellow: '#e0af68',
+          blue: '#7aa2f7',
+          magenta: '#bb9af7',
+          cyan: '#7dcfff',
+          white: '#a9b1d6',
+          brightBlack: '#414868',
+          brightRed: '#f7768e',
+          brightGreen: '#9ece6a',
+          brightYellow: '#e0af68',
+          brightBlue: '#7aa2f7',
+          brightMagenta: '#bb9af7',
+          brightCyan: '#7dcfff',
+          brightWhite: '#c0caf5',
+        },
+        fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+        fontSize: 13,
+        lineHeight: 1.2,
+        cursorBlink: true,
+        cursorStyle: 'block',
+        scrollback: 5000,
+        convertEol: true,
+      });
 
-    // Welcome message
-    term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
-    term.writeln('\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m');
-    term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
-    term.writeln('');
-    term.writeln('\x1b[33mClick "Connect" to summon your Lead Programmer\x1b[0m');
-    term.writeln('\x1b[90mUses your $200/mo subscription - no API costs\x1b[0m');
-    term.writeln('');
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
 
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
+      if (terminalRef.current) {
+        term.open(terminalRef.current);
+        fitAddon.fit();
+
+        // Welcome message
+        term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
+        term.writeln('\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m');
+        term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
+        term.writeln('');
+        term.writeln('\x1b[33mClick "Connect" to summon your Lead Programmer\x1b[0m');
+        term.writeln('\x1b[90mUses your $200/mo subscription - no API costs\x1b[0m');
+        term.writeln('');
+
+        xtermRef.current = term;
+        fitAddonRef.current = fitAddon;
+      }
+    };
+
+    initTerminal();
 
     // Handle resize
     const handleResize = () => {
@@ -86,8 +98,10 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      term.dispose();
-      xtermRef.current = null;
+      if (xtermRef.current) {
+        xtermRef.current.dispose();
+        xtermRef.current = null;
+      }
       fitAddonRef.current = null;
     };
   }, []);
