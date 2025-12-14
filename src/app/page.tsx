@@ -24,6 +24,7 @@ import {
   ProjectManagerPanel,
   DocsPanel,
 } from '../components/panels';
+import { ClaudeTerminal } from '../components/panels/ClaudeTerminal';
 
 // Hooks
 import { useCatalogerWorker } from '../hooks/useCatalogerWorker';
@@ -98,6 +99,9 @@ export default function DevEnvironmentPage() {
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; url: string; type: string; size: number }>>([]);
   const [isUploading, setIsUploading] = useState(false);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Toggle between Claude Code terminal and Chad quick chat
+  const [chatMode, setChatMode] = useState<'terminal' | 'chat'>('terminal');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch projects on mount
@@ -579,117 +583,144 @@ export default function DevEnvironmentPage() {
               <BrowserPreview project={selectedProject} env={selectedEnv} userId={user?.id} />
             </div>
 
-            {/* Claude Chat - 1/3 */}
-            <div className="flex-1 min-w-0 max-w-md flex flex-col bg-gray-850">
-              <div className="px-3 py-2 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-400 flex items-center gap-2">
-                  🤖 Claude Code
-                </span>
-                {lastUsage && (
-                  <span className="text-xs text-gray-500">
-                    {lastUsage.input_tokens + lastUsage.output_tokens} tokens
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 overflow-auto p-3 space-y-3">
-                {messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
-                      msg.role === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-800 border border-gray-700 text-gray-200'
-                    }`}>
-                      <MessageContent content={msg.content} />
-                    </div>
-                  </div>
-                ))}
-
-                {isSending && streamingContent && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[90%] rounded-lg px-3 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-200">
-                      <MessageContent content={streamingContent} />
-                      <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
-                    </div>
-                  </div>
-                )}
-
-                {isSending && !streamingContent && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2 text-gray-400 text-sm">
-                        <span className="animate-pulse">●</span>
-                        <span className="animate-pulse" style={{ animationDelay: '150ms' }}>●</span>
-                        <span className="animate-pulse" style={{ animationDelay: '300ms' }}>●</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+            {/* Claude Code Terminal / Chad Chat - 1/3 */}
+            <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
+              {/* Mode Toggle Header */}
+              <div className="flex items-center border-b border-gray-700 bg-gray-800">
+                <button
+                  onClick={() => setChatMode('terminal')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                    chatMode === 'terminal'
+                      ? 'text-cyan-400 bg-gray-900 border-b-2 border-cyan-400'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Claude Code
+                </button>
+                <button
+                  onClick={() => setChatMode('chat')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                    chatMode === 'chat'
+                      ? 'text-blue-400 bg-gray-900 border-b-2 border-blue-400'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Chad (Quick)
+                </button>
               </div>
 
-              {/* Claude Input */}
-              <div className="p-2 border-t border-gray-700 bg-gray-800">
-                {/* Attached Files Preview */}
-                {attachedFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {attachedFiles.map((file, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs text-gray-300"
-                      >
-                        <span>{file.type.startsWith('image/') ? '🖼️' : '📄'}</span>
-                        <span className="max-w-[100px] truncate">{file.name}</span>
-                        <button
-                          onClick={() => removeAttachment(i)}
-                          className="text-gray-500 hover:text-red-400 ml-1"
-                        >
-                          ×
-                        </button>
+              {chatMode === 'terminal' ? (
+                /* Claude Code Terminal */
+                <ClaudeTerminal
+                  projectPath={selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}
+                />
+              ) : (
+                /* Chad Quick Chat */
+                <>
+                  <div className="flex-1 overflow-auto p-3 space-y-3">
+                    {messages.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                          msg.role === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-800 border border-gray-700 text-gray-200'
+                        }`}>
+                          <MessageContent content={msg.content} />
+                        </div>
                       </div>
                     ))}
+
+                    {isSending && streamingContent && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[90%] rounded-lg px-3 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-200">
+                          <MessageContent content={streamingContent} />
+                          <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
+                        </div>
+                      </div>
+                    )}
+
+                    {isSending && !streamingContent && (
+                      <div className="flex justify-start">
+                        <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2 text-gray-400 text-sm">
+                            <span className="animate-pulse">●</span>
+                            <span className="animate-pulse" style={{ animationDelay: '150ms' }}>●</span>
+                            <span className="animate-pulse" style={{ animationDelay: '300ms' }}>●</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
                   </div>
-                )}
 
-                <div className="flex gap-2">
-                  {/* Attach Button */}
-                  <button
-                    onClick={() => chatFileInputRef.current?.click()}
-                    disabled={isUploading || !selectedProject}
-                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-300 rounded-lg text-sm"
-                    title="Attach files"
-                  >
-                    {isUploading ? '...' : '📎'}
-                  </button>
-                  <input
-                    ref={chatFileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => e.target.files && handleAttachFiles(e.target.files)}
-                  />
+                  {/* Chad Input */}
+                  <div className="p-2 border-t border-gray-700 bg-gray-800">
+                    {attachedFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {attachedFiles.map((file, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs text-gray-300"
+                          >
+                            <span>{file.type.startsWith('image/') ? '🖼️' : '📄'}</span>
+                            <span className="max-w-[100px] truncate">{file.name}</span>
+                            <button
+                              onClick={() => removeAttachment(i)}
+                              className="text-gray-500 hover:text-red-400 ml-1"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                  <textarea
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Ask Claude... (Enter to send, Shift+Enter for new line)"
-                    rows={5}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={(!inputMessage.trim() && attachedFiles.length === 0) || isSending}
-                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg text-sm"
-                  >
-                    {isSending ? '...' : '→'}
-                  </button>
-                </div>
-              </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => chatFileInputRef.current?.click()}
+                        disabled={isUploading || !selectedProject}
+                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-300 rounded-lg text-sm"
+                        title="Attach files"
+                      >
+                        {isUploading ? '...' : '📎'}
+                      </button>
+                      <input
+                        ref={chatFileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => e.target.files && handleAttachFiles(e.target.files)}
+                      />
+
+                      <textarea
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        placeholder="Quick question for Chad..."
+                        rows={3}
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+                      />
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={(!inputMessage.trim() && attachedFiles.length === 0) || isSending}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg text-sm"
+                      >
+                        {isSending ? '...' : '→'}
+                      </button>
+                    </div>
+                    {lastUsage && (
+                      <div className="text-xs text-gray-500 mt-1 text-right">
+                        {lastUsage.input_tokens + lastUsage.output_tokens} tokens (${lastUsage.cost_usd.toFixed(4)})
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
