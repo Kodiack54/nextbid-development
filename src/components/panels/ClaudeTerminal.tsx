@@ -147,6 +147,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
           cols: xtermRef.current.cols,
           rows: xtermRef.current.rows,
         }));
+        // Focus the terminal so user can type
+        xtermRef.current.focus();
       }
     };
 
@@ -253,8 +255,9 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Terminal */}
       <div
         ref={terminalRef}
-        className="flex-1 p-1"
+        className="flex-1 p-1 cursor-text"
         style={{ minHeight: '300px' }}
+        onClick={() => xtermRef.current?.focus()}
       />
     </div>
   );
