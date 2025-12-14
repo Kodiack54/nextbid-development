@@ -24,7 +24,7 @@ import {
   ProjectManagerPanel,
   DocsPanel,
 } from '../components/panels';
-import { ClaudeTerminal } from '../components/panels/ClaudeTerminal';
+// ClaudeTerminal removed - now using two-tab chat interface (Claude/Chad)
 
 // Hooks
 import { useCatalogerWorker } from '../hooks/useCatalogerWorker';
@@ -82,9 +82,9 @@ export default function DevEnvironmentPage() {
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
-  // Chat state
+  // Chat state - shared between Claude and Chad modes
   const [localMessages, setLocalMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Hello! I\'m Claude, your AI coding assistant. Select a project to get started, then ask me anything about your code.' }
+    { role: 'assistant', content: 'Hello! Select a project to get started, then ask me anything about your code.\n\n**Claude** (Sonnet) - Smarter, better for complex tasks\n**Chad** (Haiku) - Faster & cheaper, great for quick questions' }
   ]);
   const messages = sessionMessages.length > 0 ? sessionMessages : localMessages;
 
@@ -100,8 +100,8 @@ export default function DevEnvironmentPage() {
   const [isUploading, setIsUploading] = useState(false);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Toggle between Claude Code terminal and Chad quick chat
-  const [chatMode, setChatMode] = useState<'terminal' | 'chat'>('terminal');
+  // Toggle between Claude (Sonnet) and Chad (Haiku)
+  const [chatMode, setChatMode] = useState<'claude' | 'chad'>('claude');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch projects on mount
@@ -248,6 +248,41 @@ export default function DevEnvironmentPage() {
     try {
       const chatMessages = [...messages.slice(1), { role: 'user' as const, content: userMessage }];
 
+      // Claude mode uses Sonnet (smarter), Chad mode uses Haiku (faster/cheaper)
+      const model = chatMode === 'claude' ? 'claude-sonnet-4-20250514' : 'claude-haiku-3-5-20241022';
+
+      // Different system prompts for Claude vs Chad
+      const claudePrompt = `You are Claude, an expert AI coding assistant from Anthropic.
+
+You help developers at Kodiack Studios build great software. You have access to tools to read/write files, search code, query the database, and run commands.
+
+APPROACH:
+- Think step by step before acting
+- Read actual code to understand context before making changes
+- Be thorough but concise in explanations
+- If unsure about requirements, ask for clarification
+
+Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}`;
+
+      const chadPrompt = `You are Chad, lead developer at Kodiack Studios.
+
+PERSONALITY:
+- Amazing coder and problem solver - confident but never arrogant
+- Easy going and chill, but serious about your work
+- You LISTEN to instructions and follow them precisely
+- You NEVER guess - if unsure, ask the boss (user) to clarify
+- Proactive - look at actual code and data, don't just theorize
+
+RULES:
+1. USE TOOLS to look at actual code before answering questions
+2. If not 100% sure what the user wants, ASK
+3. Be direct and concise - no fluff
+4. Explain briefly what you did after making changes
+
+Project: ${selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}`;
+
+      const systemPrompt = chatMode === 'claude' ? claudePrompt : chadPrompt;
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -255,6 +290,8 @@ export default function DevEnvironmentPage() {
           messages: chatMessages,
           user_id: user?.id,
           project_id: selectedProject?.id,
+          model: model,
+          system_prompt: systemPrompt,
         }),
       });
 
@@ -303,7 +340,7 @@ export default function DevEnvironmentPage() {
         input_tokens: usageData?.input_tokens,
         output_tokens: usageData?.output_tokens,
         cost_usd: usageData?.cost_usd,
-        model: 'claude-3-5-sonnet-20241022',
+        model: model,
       });
       setLocalMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
       setStreamingContent('');
@@ -588,139 +625,136 @@ export default function DevEnvironmentPage() {
               {/* Mode Toggle Header */}
               <div className="flex items-center border-b border-gray-700 bg-gray-800">
                 <button
-                  onClick={() => setChatMode('terminal')}
+                  onClick={() => setChatMode('claude')}
                   className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-                    chatMode === 'terminal'
-                      ? 'text-cyan-400 bg-gray-900 border-b-2 border-cyan-400'
+                    chatMode === 'claude'
+                      ? 'text-orange-400 bg-gray-900 border-b-2 border-orange-400'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Claude Code
+                  🧠 Claude (Sonnet)
                 </button>
                 <button
-                  onClick={() => setChatMode('chat')}
+                  onClick={() => setChatMode('chad')}
                   className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-                    chatMode === 'chat'
+                    chatMode === 'chad'
                       ? 'text-blue-400 bg-gray-900 border-b-2 border-blue-400'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Chad (Quick)
+                  ⚡ Chad (Haiku)
                 </button>
               </div>
 
-              {chatMode === 'terminal' ? (
-                /* Claude Code Terminal */
-                <ClaudeTerminal
-                  projectPath={selectedProject?.server_path || '/var/www/NextBid_Dev/dev-studio-5000'}
-                />
-              ) : (
-                /* Chad Quick Chat */
-                <>
-                  <div className="flex-1 overflow-auto p-3 space-y-3">
-                    {messages.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
-                          msg.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-800 border border-gray-700 text-gray-200'
-                        }`}>
-                          <MessageContent content={msg.content} />
-                        </div>
+              {/* Chat Interface - Both Claude and Chad */}
+              <>
+                <div className="flex-1 overflow-auto p-3 space-y-3">
+                  {messages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                        msg.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-800 border border-gray-700 text-gray-200'
+                      }`}>
+                        <MessageContent content={msg.content} />
                       </div>
-                    ))}
-
-                    {isSending && streamingContent && (
-                      <div className="flex justify-start">
-                        <div className="max-w-[90%] rounded-lg px-3 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-200">
-                          <MessageContent content={streamingContent} />
-                          <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
-                        </div>
-                      </div>
-                    )}
-
-                    {isSending && !streamingContent && (
-                      <div className="flex justify-start">
-                        <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
-                          <div className="flex items-center gap-2 text-gray-400 text-sm">
-                            <span className="animate-pulse">●</span>
-                            <span className="animate-pulse" style={{ animationDelay: '150ms' }}>●</span>
-                            <span className="animate-pulse" style={{ animationDelay: '300ms' }}>●</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                  </div>
-
-                  {/* Chad Input */}
-                  <div className="p-2 border-t border-gray-700 bg-gray-800">
-                    {attachedFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {attachedFiles.map((file, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs text-gray-300"
-                          >
-                            <span>{file.type.startsWith('image/') ? '🖼️' : '📄'}</span>
-                            <span className="max-w-[100px] truncate">{file.name}</span>
-                            <button
-                              onClick={() => removeAttachment(i)}
-                              className="text-gray-500 hover:text-red-400 ml-1"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => chatFileInputRef.current?.click()}
-                        disabled={isUploading || !selectedProject}
-                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-300 rounded-lg text-sm"
-                        title="Attach files"
-                      >
-                        {isUploading ? '...' : '📎'}
-                      </button>
-                      <input
-                        ref={chatFileInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => e.target.files && handleAttachFiles(e.target.files)}
-                      />
-
-                      <textarea
-                        value={inputMessage}
-                        onChange={(e) => setInputMessage(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
-                        placeholder="Quick question for Chad..."
-                        rows={3}
-                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-                      />
-                      <button
-                        onClick={handleSendMessage}
-                        disabled={(!inputMessage.trim() && attachedFiles.length === 0) || isSending}
-                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg text-sm"
-                      >
-                        {isSending ? '...' : '→'}
-                      </button>
                     </div>
-                    {lastUsage && (
-                      <div className="text-xs text-gray-500 mt-1 text-right">
-                        {lastUsage.input_tokens + lastUsage.output_tokens} tokens (${lastUsage.cost_usd.toFixed(4)})
+                  ))}
+
+                  {isSending && streamingContent && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[90%] rounded-lg px-3 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-200">
+                        <MessageContent content={streamingContent} />
+                        <span className={`inline-block w-2 h-4 animate-pulse ml-1 ${chatMode === 'claude' ? 'bg-orange-500' : 'bg-blue-500'}`} />
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                  {isSending && !streamingContent && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+                        <div className={`flex items-center gap-2 text-sm ${chatMode === 'claude' ? 'text-orange-400' : 'text-blue-400'}`}>
+                          <span className="animate-pulse">●</span>
+                          <span className="animate-pulse" style={{ animationDelay: '150ms' }}>●</span>
+                          <span className="animate-pulse" style={{ animationDelay: '300ms' }}>●</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Chat Input */}
+                <div className="p-2 border-t border-gray-700 bg-gray-800">
+                  {attachedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {attachedFiles.map((file, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs text-gray-300"
+                        >
+                          <span>{file.type.startsWith('image/') ? '🖼️' : '📄'}</span>
+                          <span className="max-w-[100px] truncate">{file.name}</span>
+                          <button
+                            onClick={() => removeAttachment(i)}
+                            className="text-gray-500 hover:text-red-400 ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => chatFileInputRef.current?.click()}
+                      disabled={isUploading || !selectedProject}
+                      className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-300 rounded-lg text-sm"
+                      title="Attach files"
+                    >
+                      {isUploading ? '...' : '📎'}
+                    </button>
+                    <input
+                      ref={chatFileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => e.target.files && handleAttachFiles(e.target.files)}
+                    />
+
+                    <textarea
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={chatMode === 'claude' ? 'Ask Claude (smarter, uses Sonnet)...' : 'Quick question for Chad (faster, uses Haiku)...'}
+                      rows={3}
+                      className={`flex-1 bg-gray-700 border rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none resize-none ${
+                        chatMode === 'claude' ? 'border-orange-600/50 focus:border-orange-500' : 'border-gray-600 focus:border-blue-500'
+                      }`}
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={(!inputMessage.trim() && attachedFiles.length === 0) || isSending}
+                      className={`px-3 py-2 disabled:bg-gray-600 text-white rounded-lg text-sm ${
+                        chatMode === 'claude' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {isSending ? '...' : '→'}
+                    </button>
                   </div>
-                </>
-              )}
+                  {lastUsage && (
+                    <div className={`text-xs mt-1 text-right ${chatMode === 'claude' ? 'text-orange-500/60' : 'text-blue-500/60'}`}>
+                      {chatMode === 'claude' ? 'Sonnet' : 'Haiku'} | {lastUsage.input_tokens + lastUsage.output_tokens} tokens (${lastUsage.cost_usd.toFixed(4)})
+                    </div>
+                  )}
+                </div>
+              </>
             </div>
           </div>
 
