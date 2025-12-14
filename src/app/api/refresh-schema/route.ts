@@ -6,136 +6,151 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
+// Known prefixes to scan for - add more as needed
+const KNOWN_PREFIXES = [
+  'dev',
+  'nextbid',
+  'lowvoltage',
+  'nextbidder',
+  'nextsource',
+  'nexttask',
+  'nexttech'
+];
+
+// Friendly names for auto-discovered prefixes
+const PREFIX_NAMES: Record<string, string> = {
+  'dev': 'Gateway / Dev Studio',
+  'nextbid': 'NextBid Portal',
+  'lowvoltage': 'LowVoltage Bidding',
+  'nextbidder': 'NextBidder',
+  'nextsource': 'NextSource',
+  'nexttask': 'NextTask',
+  'nexttech': 'NextTech'
+};
+
 /**
  * POST /api/refresh-schema
- * Refresh database schema for all projects
+ * Refresh database schema for all prefixes (auto-detect)
  */
 export async function POST() {
   try {
-    console.log('🔄 Refreshing database schema...');
+    console.log('Refreshing database schema for all prefixes...');
 
-    // First, try using RPC function
-    let columns: any[] | null = null;
-    let rpcError: any = null;
+    const allSchemas: Record<string, {
+      prefix: string;
+      name: string;
+      schema: Record<string, { columns: string[]; types: Record<string, string> }>;
+      tableCount: number;
+    }> = {};
 
-    try {
-      const result = await supabase.rpc('get_columns_for_prefix', {
-        prefix: 'dev'
-      });
-      columns = result.data;
-      rpcError = result.error;
-    } catch (e) {
-      rpcError = e;
-    }
+    // Scan each known prefix
+    for (const prefix of KNOWN_PREFIXES) {
+      console.log('Scanning prefix:', prefix + '_');
 
-    // If RPC failed, try direct query as fallback
-    if (rpcError || !columns || columns.length === 0) {
-      console.log('RPC failed or empty, trying direct query...');
-      console.log('RPC error:', rpcError?.message || 'No data returned');
+      // Try RPC first
+      let columns: any[] | null = null;
 
-      // Direct query to information_schema
-      const { data: directColumns, error: directError } = await supabase
-        .from('information_schema.columns')
-        .select('table_name, column_name, data_type, is_nullable')
-        .eq('table_schema', 'public')
-        .like('table_name', 'dev_%');
-
-      if (!directError && directColumns && directColumns.length > 0) {
-        columns = directColumns;
-        console.log(`Direct query found ${columns.length} columns`);
-      }
-    }
-
-    // If still no data, return with debug info
-    if (!columns || columns.length === 0) {
-      // Check if dev_projects table exists at minimum
-      const { data: projectsCheck, error: checkError } = await supabase
-        .from('dev_projects')
-        .select('id, name, table_prefix, is_active')
-        .limit(5);
-
-      return NextResponse.json({
-        success: false,
-        error: 'No dev_ tables found',
-        message: 'Could not find any tables with dev_ prefix',
-        debug: {
-          rpc_error: rpcError?.message || null,
-          projects_found: projectsCheck?.length || 0,
-          projects: projectsCheck || [],
-          hint: 'Make sure the get_columns_for_prefix SQL function was created in Supabase'
+      try {
+        const result = await supabase.rpc('get_columns_for_prefix', { prefix });
+        if (result.data && result.data.length > 0) {
+          columns = result.data;
         }
-      }, { status: 200 }); // Return 200 so we can see debug info
-    }
-
-    // Build schema object from columns
-    const schema: Record<string, { columns: string[]; types: Record<string, string> }> = {};
-
-    for (const col of columns) {
-      const tableName = col.table_name;
-      if (!schema[tableName]) {
-        schema[tableName] = { columns: [], types: {} };
+      } catch (e) {
+        // RPC might not exist, continue
       }
-      schema[tableName].columns.push(col.column_name);
-      schema[tableName].types[col.column_name] = col.data_type;
+
+      // If no columns found, skip this prefix
+      if (!columns || columns.length === 0) {
+        console.log('No tables found for prefix:', prefix + '_');
+        continue;
+      }
+
+      // Build schema for this prefix
+      const schema: Record<string, { columns: string[]; types: Record<string, string> }> = {};
+
+      for (const col of columns) {
+        const tableName = col.table_name;
+        if (!schema[tableName]) {
+          schema[tableName] = { columns: [], types: {} };
+        }
+        schema[tableName].columns.push(col.column_name);
+        schema[tableName].types[col.column_name] = col.data_type;
+      }
+
+      const tableCount = Object.keys(schema).length;
+      console.log('Found', tableCount, 'tables for', prefix + '_');
+
+      allSchemas[prefix] = {
+        prefix,
+        name: PREFIX_NAMES[prefix] || prefix + ' tables',
+        schema,
+        tableCount
+      };
     }
 
-    const tableCount = Object.keys(schema).length;
-    console.log(`Found ${tableCount} tables:`, Object.keys(schema));
-
-    // Get all active projects
-    const { data: allProjects, error: projError } = await supabase
+    // Get existing projects
+    const { data: existingProjects } = await supabase
       .from('dev_projects')
-      .select('id, name, table_prefix, is_active')
-      .eq('is_active', true);
+      .select('id, name, table_prefix, is_active');
 
-    if (projError) {
-      console.error('Error fetching projects:', projError);
+    const updatedProjects: string[] = [];
+    const createdProjects: string[] = [];
+
+    // Update or create project for each discovered prefix
+    for (const [prefix, data] of Object.entries(allSchemas)) {
+      const existingProject = existingProjects?.find(p => p.table_prefix === prefix);
+
+      if (existingProject) {
+        // Update existing project
+        const { error } = await supabase
+          .from('dev_projects')
+          .update({ database_schema: data.schema })
+          .eq('id', existingProject.id);
+
+        if (!error) {
+          updatedProjects.push(existingProject.name);
+        }
+      } else {
+        // Create new project entry for this prefix
+        const { error } = await supabase
+          .from('dev_projects')
+          .insert({
+            name: data.name,
+            slug: prefix,
+            table_prefix: prefix,
+            database_schema: data.schema,
+            is_active: true,
+            droplet_name: 'Database Schema',
+            droplet_ip: '-',
+            server_path: '-',
+            port_dev: 0,
+            port_test: 0,
+            port_prod: 0,
+            sort_order: 100
+          });
+
+        if (!error) {
+          createdProjects.push(data.name);
+        } else {
+          console.error('Failed to create project for ' + prefix + ':', error);
+        }
+      }
     }
 
-    let updatedProjects: string[] = [];
-
-    // Update the first project that has table_prefix = 'dev'
-    const projectWithDevPrefix = allProjects?.find(p => p.table_prefix === 'dev');
-
-    if (projectWithDevPrefix) {
-      const { error: updateError } = await supabase
-        .from('dev_projects')
-        .update({ database_schema: schema })
-        .eq('id', projectWithDevPrefix.id);
-
-      if (!updateError) {
-        updatedProjects.push(projectWithDevPrefix.name || projectWithDevPrefix.id);
-        console.log(`Updated project ${projectWithDevPrefix.id} with schema`);
-      }
-    } else if (allProjects && allProjects.length > 0) {
-      // No project with dev prefix, update the first active project
-      const firstProject = allProjects[0];
-      const { error: updateError } = await supabase
-        .from('dev_projects')
-        .update({
-          database_schema: schema,
-          table_prefix: 'dev'
-        })
-        .eq('id', firstProject.id);
-
-      if (!updateError) {
-        updatedProjects.push(firstProject.name || firstProject.id);
-        console.log(`Updated project ${firstProject.id} with schema and set prefix to 'dev'`);
-      }
-    } else {
-      console.log('No active projects found to update');
-    }
+    const totalTables = Object.values(allSchemas).reduce((sum, s) => sum + s.tableCount, 0);
 
     return NextResponse.json({
       success: true,
-      message: 'Schema refreshed',
-      dev_tables_found: tableCount,
-      tables: Object.keys(schema),
+      message: 'Schema refreshed for all prefixes',
+      prefixes_found: Object.keys(allSchemas).length,
+      total_tables: totalTables,
+      schemas: Object.entries(allSchemas).map(([prefix, data]) => ({
+        prefix: prefix + '_',
+        name: data.name,
+        tables: data.tableCount
+      })),
       updated_projects: updatedProjects,
-      debug: {
-        total_columns: columns.length,
-        active_projects: allProjects?.length || 0
-      }
+      created_projects: createdProjects
     });
 
   } catch (error) {
@@ -145,79 +160,6 @@ export async function POST() {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
-
-/**
- * Refresh schema by scanning tables with known prefixes
- */
-async function refreshByPrefix() {
-  // Get all projects
-  const { data: projects } = await supabase
-    .from('dev_projects')
-    .select('id, name, table_prefix');
-
-  if (!projects?.length) {
-    return NextResponse.json({
-      success: true,
-      message: 'No projects to refresh',
-      projects_updated: 0
-    });
-  }
-
-  let updated = 0;
-
-  for (const project of projects) {
-    if (!project.table_prefix) continue;
-
-    // Get tables for this prefix
-    const { data: columns } = await supabase
-      .rpc('get_columns_for_prefix', { prefix: project.table_prefix });
-
-    if (columns) {
-      // Build schema object
-      const schema: Record<string, { columns: string[]; types: Record<string, string> }> = {};
-
-      for (const col of columns) {
-        if (!schema[col.table_name]) {
-          schema[col.table_name] = { columns: [], types: {} };
-        }
-        schema[col.table_name].columns.push(col.column_name);
-        schema[col.table_name].types[col.column_name] = col.data_type;
-      }
-
-      // Update project
-      await supabase
-        .from('dev_projects')
-        .update({ database_schema: schema })
-        .eq('id', project.id);
-
-      updated++;
-    }
-  }
-
-  // Also get all dev_ tables for the main schema view
-  const { data: devTables } = await supabase
-    .rpc('get_columns_for_prefix', { prefix: 'dev' });
-
-  const allDevSchema: Record<string, { columns: string[]; types: Record<string, string> }> = {};
-
-  if (devTables) {
-    for (const col of devTables) {
-      if (!allDevSchema[col.table_name]) {
-        allDevSchema[col.table_name] = { columns: [], types: {} };
-      }
-      allDevSchema[col.table_name].columns.push(col.column_name);
-      allDevSchema[col.table_name].types[col.column_name] = col.data_type;
-    }
-  }
-
-  return NextResponse.json({
-    success: true,
-    message: `Schema refreshed for ${updated} projects`,
-    projects_updated: updated,
-    dev_tables_found: Object.keys(allDevSchema).length,
-    tables: Object.keys(allDevSchema)
-  });
 }
 
 /**
