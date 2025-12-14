@@ -157,12 +157,15 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
   }, []);
 
   const sendInput = useCallback(() => {
+    console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input:', inputValue);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Send input with newline (allow empty for just Enter key)
+      console.log('[ClaudeTerminal] Sending:', inputValue);
       wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\n' }));
       setInputValue('');
+    } else {
+      console.log('[ClaudeTerminal] WebSocket not open');
     }
-  }, [inputValue]);
+  }, [inputValue, connected]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
