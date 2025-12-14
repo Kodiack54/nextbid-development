@@ -16,12 +16,12 @@ const PROJECTS_BASE_PATH = '/var/www/NextBid_Dev';
 const ALLOWED_COMMANDS = ['npm', 'npx', 'git', 'ls', 'cat', 'head', 'tail', 'grep', 'find', 'wc', 'pwd'];
 
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-  'claude-haiku-3-5-20241022': { input: 0.80, output: 4.0 },  // 75% cheaper!
+  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
+  'claude-3-5-haiku-20241022': { input: 0.80, output: 4.0 },  // 75% cheaper!
 };
 
 // Use Haiku by default for cost savings (switch to sonnet for complex tasks)
-const DEFAULT_MODEL = 'claude-haiku-3-5-20241022';
+const DEFAULT_MODEL = 'claude-3-5-haiku-20241022';
 const MAX_HISTORY_MESSAGES = 10; // Only send last 10 messages to reduce token usage
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
