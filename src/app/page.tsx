@@ -82,11 +82,17 @@ export default function DevEnvironmentPage() {
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
-  // Chat state - shared between Claude and Chad modes
-  const [localMessages, setLocalMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Welcome to Kodiack Studios AI Team!\n\n**Claude** - Lead Programmer (Sonnet)\n*Complex coding, architecture, deep problem solving*\n\n**Chad** - Assistant Dev (Haiku)\n*Quick questions, simple fixes, fast & cheap*\n\nSelect a project to get started!' }
+  // Separate chat histories for each AI team member
+  const [claudeMessages, setClaudeMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
+    { role: 'assistant', content: "Hey Boss! I'm Claude, your Lead Programmer.\n\nI handle the complex stuff - architecture, deep problem solving, thorough code reviews. I use Sonnet so I'm smarter but cost a bit more.\n\nWhat are we building today?" }
   ]);
-  const messages = sessionMessages.length > 0 ? sessionMessages : localMessages;
+  const [chadMessages, setChadMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
+    { role: 'assistant', content: "Yo! Chad here, Assistant Dev.\n\nI'm your quick helper - simple questions, fast fixes, looking stuff up. I use Haiku so I'm cheap and fast.\n\nWhat do you need?" }
+  ]);
+
+  // Get current messages based on active chat mode
+  const messages = chatMode === 'claude' ? claudeMessages : chadMessages;
+  const setMessages = chatMode === 'claude' ? setClaudeMessages : setChadMessages;
 
   // UI state
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -238,8 +244,8 @@ export default function DevEnvironmentPage() {
       userMessage = userMessage ? `${userMessage}\n\n${attachmentText}` : attachmentText;
     }
 
-    addMessage({ role: 'user', content: userMessage });
-    setLocalMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Add to the correct chat history based on mode
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setInputMessage('');
     setAttachedFiles([]);
     setIsSending(true);
@@ -349,22 +355,14 @@ User: The Boss`;
         }
       }
 
-      addMessage({
-        role: 'assistant',
-        content: fullContent,
-        input_tokens: usageData?.input_tokens,
-        output_tokens: usageData?.output_tokens,
-        cost_usd: usageData?.cost_usd,
-        model: model,
-      });
-      setLocalMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
+      // Add assistant response to the correct chat history
+      setMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
       setStreamingContent('');
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errContent = `Sorry, I encountered an error: ${errorMessage}\n\nPlease check that your Anthropic API key is configured in the .env file.`;
-      addMessage({ role: 'assistant', content: errContent });
-      setLocalMessages(prev => [...prev, { role: 'assistant', content: errContent }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: errContent }]);
     } finally {
       setIsSending(false);
     }
