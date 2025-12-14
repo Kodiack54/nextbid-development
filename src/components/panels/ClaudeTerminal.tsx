@@ -137,8 +137,26 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
               for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                // Skip spinner-only lines (status updates that spam)
-                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working)/.test(line.replace(/\x1b\[[0-9;]*m/g, ''));
+                const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+
+                // Skip lines that are just UI noise
+                const isSpinnerLine = /^[·✢*✶✻✽∴]?\s*(Musing|Thinking|Working|Churning)/.test(cleanLine);
+                const isShortcutHint = cleanLine === '? for shortcuts';
+                const isEmptyPrompt = /^>\s*$/.test(cleanLine);
+                const isDivider = /^[─]+$/.test(cleanLine);
+
+                // Skip shortcut hints and empty dividers
+                if (isShortcutHint || isEmptyPrompt) {
+                  continue;
+                }
+
+                // Collapse consecutive dividers
+                if (isDivider && newOutput.length > 0) {
+                  const lastClean = newOutput[newOutput.length - 1].replace(/\x1b\[[0-9;]*m/g, '').trim();
+                  if (/^[─]+$/.test(lastClean)) {
+                    continue;
+                  }
+                }
 
                 if (isSpinnerLine && newOutput.length > 0) {
                   // Update last line instead of adding
