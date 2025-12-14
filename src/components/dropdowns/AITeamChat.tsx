@@ -29,11 +29,11 @@ interface AITeamChatProps {
   userName?: string;
 }
 
-// Optimal sizing for Claude Code output (wider to avoid distortion)
+// Optimal sizing for AI Team Chat (5x8 ratio - taller rectangle)
 const MIN_WIDTH = 500;
-const MIN_HEIGHT = 400;
-const DEFAULT_WIDTH = 650;
-const DEFAULT_HEIGHT = 550;
+const MIN_HEIGHT = 500;
+const DEFAULT_WIDTH = 550;
+const DEFAULT_HEIGHT = 700;
 
 export default function AITeamChat({
   onSendToClaudeTerminal,
@@ -271,12 +271,14 @@ export default function AITeamChat({
               <div className="p-2">
                 <p className="text-gray-500 text-xs font-semibold uppercase px-2 mb-1">AI Team</p>
 
-                {/* Claude */}
+                {/* Claude - green when online, grey when offline */}
                 <button
                   onClick={() => setActiveMember('claude')}
                   className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors ${
                     activeMember === 'claude'
-                      ? 'bg-orange-600 text-white'
+                      ? claudeConnected
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-600 text-white'
                       : 'text-gray-300 hover:bg-gray-800'
                   }`}
                 >
@@ -288,7 +290,7 @@ export default function AITeamChat({
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="block truncate font-medium">Claude</span>
-                    <span className="block truncate text-xs opacity-60">Lead Dev</span>
+                    <span className="block truncate text-xs opacity-60">{claudeConnected ? 'Online' : 'Offline'}</span>
                   </div>
                 </button>
 
