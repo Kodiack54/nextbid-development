@@ -98,9 +98,18 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output') {
+          // Filter out terminal control sequences we don't need
+          let data = msg.data;
+          // Remove bracketed paste mode sequences
+          data = data.replace(/\x1b\[\?2004[hl]/g, '');
+          // Remove window title sequences
+          data = data.replace(/\x1b\]0;[^\x07]*\x07/g, '');
+          // Remove other common control sequences
+          data = data.replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
+
           // Split by newlines and add each line
-          const lines = msg.data.split(/\r?\n/);
-          setOutput(prev => [...prev, ...lines.filter((l: string) => l)]);
+          const lines = data.split(/\r?\n/);
+          setOutput(prev => [...prev, ...lines.filter((l: string) => l.trim())]);
         } else if (msg.type === 'exit') {
           setOutput(prev => [...prev, `\x1b[33m[Process exited: ${msg.code}]\x1b[0m`]);
           setConnected(false);
