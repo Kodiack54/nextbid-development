@@ -267,8 +267,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Terminal output - xterm.js handles all the TUI rendering */}
       <div
         ref={terminalRef}
-        className="flex-1 min-h-0 overflow-auto"
-        style={{ padding: '8px', maxWidth: '100%' }}
+        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto"
+        style={{ padding: '8px' }}
       />
 
       {/* Input area - separate textarea since xterm keyboard wasn't working */}
