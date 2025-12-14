@@ -101,7 +101,7 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       // Auto-start Claude after 2 seconds
       setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data: 'claude\n' }));
+          ws.send(JSON.stringify({ type: 'input', data: 'claude\r' }));
         }
       }, 2000);
 
@@ -160,7 +160,8 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
     console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input:', inputValue);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('[ClaudeTerminal] Sending:', inputValue);
-      wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\n' }));
+      // Use \r (carriage return) for Enter - required for TUI prompts
+      wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\r' }));
       setInputValue('');
     } else {
       console.log('[ClaudeTerminal] WebSocket not open');
