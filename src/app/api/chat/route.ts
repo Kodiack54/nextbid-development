@@ -129,7 +129,7 @@ async function executeTool(toolName: string, toolInput: any, projectPath: string
         const res = await fetch('http://localhost:5000/api/docs');
         const r = await res.json();
         if (!r.success) return 'Error listing docs';
-        const fmt = (items, d=0) => items.map(i => '  '.repeat(d) + (i.type==='folder' ? '📁 '+i.name+'/' : '📄 '+i.name) + (i.children ? '\n'+fmt(i.children,d+1) : '')).join('\n');
+        const fmt = (items: any[], d=0): string => items.map(i => '  '.repeat(d) + (i.type==='folder' ? '📁 '+i.name+'/' : '📄 '+i.name) + (i.children ? '\n'+fmt(i.children,d+1) : '')).join('\n');
         return r.docs.length ? fmt(r.docs) : 'No docs yet';
       }
       default: return 'Unknown tool: ' + toolName;
