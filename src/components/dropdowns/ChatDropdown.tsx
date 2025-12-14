@@ -22,6 +22,8 @@ interface ChatChannel {
   unread_count: number;
   last_message?: string;
   participants?: string[];
+  isAI?: boolean;
+  aiType?: 'claude' | 'chad';
 }
 
 const MIN_WIDTH = 450;
@@ -29,7 +31,18 @@ const MIN_HEIGHT = 400;
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 550;
 
-export default function ChatDropdown() {
+interface ChatDropdownProps {
+  // AI Team callbacks
+  onSendToClaudeTerminal?: (message: string) => void;
+  claudeConnected?: boolean;
+  claudeMessages?: ChatMessage[];  // Conversation messages from Claude terminal
+}
+
+export default function ChatDropdown({
+  onSendToClaudeTerminal,
+  claudeConnected = false,
+  claudeMessages = [],
+}: ChatDropdownProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -60,6 +73,28 @@ export default function ChatDropdown() {
     { id: '3', name: 'code-review', type: 'channel', description: 'Code snippets and reviews', unread_count: 1 },
     { id: '4', name: 'deployments', type: 'channel', description: 'Deployment coordination', unread_count: 0 },
   ]);
+
+  // AI Team members
+  const aiTeam: ChatChannel[] = [
+    {
+      id: 'dm-claude',
+      name: 'Claude',
+      type: 'dm',
+      description: '👨‍💻 Lead Programmer',
+      unread_count: 0,
+      isAI: true,
+      aiType: 'claude',
+    },
+    {
+      id: 'dm-chad',
+      name: 'Chad',
+      type: 'dm',
+      description: '🧑‍💻 Assistant / Transcriber',
+      unread_count: 0,
+      isAI: true,
+      aiType: 'chad',
+    },
+  ];
 
   const [directMessages, setDirectMessages] = useState<ChatChannel[]>([
     { id: 'dm1', name: 'Michael', type: 'dm', unread_count: 1, participants: ['Michael'] },

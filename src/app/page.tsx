@@ -8,7 +8,7 @@ import { useUser, useMinRole } from './contexts/UserContext';
 import { useSession } from '../hooks/useSession';
 
 // Dropdowns
-import { ChatDropdown, TimeClockDropdown, SettingsDropdown } from '../components/dropdowns';
+import { ChatDropdown, TimeClockDropdown, SettingsDropdown, AITeamChat } from '../components/dropdowns';
 
 // Panels
 import {
@@ -25,6 +25,8 @@ import {
   DocsPanel,
   ClaudeTerminal,
 } from '../components/panels';
+import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
+import type { ConversationMessage } from '../components/panels/ClaudeTerminal';
 // Claude uses Terminal (subscription), Chad uses API chat
 
 // Hooks
@@ -110,6 +112,79 @@ export default function DevEnvironmentPage() {
   const [isUploading, setIsUploading] = useState(false);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Combined chat log for both Claude and Chad (separate conversations, Slack-style)
+  const [chatLog, setChatLog] = useState<ChatLogMessage[]>([]);
+  const [chatLogFloating, setChatLogFloating] = useState(false);
+
+  // Handler to add messages to the combined log
+  const addToChatLog = (message: ChatLogMessage) => {
+    setChatLog(prev => [...prev, message]);
+  };
+
+  // AI Team Chat state
+  const [claudeConnected, setClaudeConnected] = useState(false);
+  const [claudeConversation, setClaudeConversation] = useState<ConversationMessage[]>([]);
+  const [chadConversation, setChadConversation] = useState<ConversationMessage[]>([]);
+  const [susanConversation, setSusanConversation] = useState<ConversationMessage[]>([]);
+  const claudeSendRef = useRef<((message: string) => void) | null>(null);
+
+  // Handler for Claude conversation messages (from terminal)
+  const handleClaudeConversation = (msg: ConversationMessage) => {
+    setClaudeConversation(prev => [...prev, msg]);
+  };
+
+  // Handler for sending to Chad API
+  const handleSendToChad = async (message: string): Promise<string> => {
+    // Add user message
+    const userMsg: ConversationMessage = {
+      id: `chad-user-${Date.now()}`,
+      user_id: 'me',
+      user_name: 'You',
+      content: message,
+      created_at: new Date().toISOString(),
+    };
+    setChadConversation(prev => [...prev, userMsg]);
+
+    // TODO: Implement actual Chad API call (GPT-4o-mini)
+    // For now, just echo back
+    const response = `Got it! "${message}" - I'll handle this.`;
+    const assistantMsg: ConversationMessage = {
+      id: `chad-assistant-${Date.now()}`,
+      user_id: 'chad',
+      user_name: 'Chad',
+      content: response,
+      created_at: new Date().toISOString(),
+    };
+    setChadConversation(prev => [...prev, assistantMsg]);
+    return response;
+  };
+
+  // Handler for sending to Susan API
+  const handleSendToSusan = async (message: string): Promise<string> => {
+    // Add user message
+    const userMsg: ConversationMessage = {
+      id: `susan-user-${Date.now()}`,
+      user_id: 'me',
+      user_name: 'You',
+      content: message,
+      created_at: new Date().toISOString(),
+    };
+    setSusanConversation(prev => [...prev, userMsg]);
+
+    // TODO: Implement actual Susan API call (Librarian)
+    // For now, just acknowledge
+    const response = `Thank you for letting me know! I've noted: "${message}"`;
+    const assistantMsg: ConversationMessage = {
+      id: `susan-assistant-${Date.now()}`,
+      user_id: 'susan',
+      user_name: 'Susan',
+      content: response,
+      created_at: new Date().toISOString(),
+    };
+    setSusanConversation(prev => [...prev, assistantMsg]);
+    return response;
+  };
 
   // Fetch projects on mount
   useEffect(() => {
@@ -252,6 +327,15 @@ export default function DevEnvironmentPage() {
     setIsSending(true);
     setStreamingContent('');
 
+    // Add user message to chat log (for Chad)
+    addToChatLog({
+      id: `chad-user-${Date.now()}`,
+      source: 'chad',
+      role: 'user',
+      content: userMessage,
+      timestamp: new Date(),
+    });
+
     try {
       const chatMessages = [...messages.slice(1), { role: 'user' as const, content: userMessage }];
 
@@ -359,6 +443,15 @@ User: The Boss`;
       // Add assistant response to the correct chat history
       setMessages(prev => [...prev, { role: 'assistant', content: fullContent }]);
       setStreamingContent('');
+
+      // Add Chad's response to chat log
+      addToChatLog({
+        id: `chad-assistant-${Date.now()}`,
+        source: 'chad',
+        role: 'assistant',
+        content: fullContent,
+        timestamp: new Date(),
+      });
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -455,6 +548,17 @@ User: The Boss`;
           </div>
 
           <ChatDropdown />
+          <AITeamChat
+            onSendToClaudeTerminal={(msg) => claudeSendRef.current?.(msg)}
+            claudeConnected={claudeConnected}
+            claudeMessages={claudeConversation}
+            onSendToChad={handleSendToChad}
+            chadMessages={chadConversation}
+            onSendToSusan={handleSendToSusan}
+            susanMessages={susanConversation}
+            userId={user?.id}
+            userName={user?.name}
+          />
           <TimeClockDropdown />
           <SettingsDropdown />
           <button
@@ -532,13 +636,15 @@ User: The Boss`;
               {activePanel === 'schema' && <div id="schema-panel-slot" />}
               {activePanel === 'chatlog' && (
                 <ChatLogPanel
-                  messages={messages}
+                  messages={chatLog}
                   streamingContent={streamingContent}
                   isSending={isSending}
                   session={session}
                   onSummarize={handleSummarize}
                   onEndSession={handleEndSession}
                   isSummarizing={isSummarizing}
+                  onSendToClaudeTerminal={(msg) => claudeSendRef.current?.(msg)}
+                  onSendToChad={handleSendToChad}
                 />
               )}
               {activePanel === 'hub' && (
@@ -664,7 +770,11 @@ User: The Boss`;
 
               {/* Claude = Terminal (subscription), Chad = Chat (API) */}
               {chatMode === 'claude' ? (
-                <ClaudeTerminal />
+                <ClaudeTerminal
+                  sendRef={claudeSendRef}
+                  onConversationMessage={handleClaudeConversation}
+                  onConnectionChange={setClaudeConnected}
+                />
               ) : (
                 <>
                 <div className="flex-1 overflow-auto p-3 space-y-3">

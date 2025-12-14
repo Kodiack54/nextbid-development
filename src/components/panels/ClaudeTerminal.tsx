@@ -6,14 +6,46 @@ import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
+export interface ChatLogMessage {
+  id: string;
+  source: 'claude' | 'chad';
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+// Simple message format for AI Team Chat
+export interface ConversationMessage {
+  id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  created_at: string;
+}
+
 interface ClaudeTerminalProps {
   projectPath?: string;
   wsUrl?: string;
+  onMessage?: (message: ChatLogMessage) => void;
+  // Expose send function for external use (AI Team Chat)
+  sendRef?: React.MutableRefObject<((message: string) => void) | null>;
+  // Callback for conversation messages (cleaner format for chat display)
+  onConversationMessage?: (message: ConversationMessage) => void;
+  // Callback for connection state changes
+  onConnectionChange?: (connected: boolean) => void;
 }
 
-export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-5000', wsUrl }: ClaudeTerminalProps) {
+export function ClaudeTerminal({
+  projectPath = '/var/www/NextBid_Dev/dev-studio-5000',
+  wsUrl,
+  onMessage,
+  sendRef,
+  onConversationMessage,
+  onConnectionChange,
+}: ClaudeTerminalProps) {
   const wsRef = useRef<WebSocket | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const messageBufferRef = useRef<string>('');
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -21,6 +53,43 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [inputValue, setInputValue] = useState('');
+
+  // Expose send function via ref for external use (AI Team Chat)
+  const sendMessage = useCallback((message: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Send text
+      wsRef.current.send(JSON.stringify({ type: 'input', data: message }));
+      // Then send Enter after a short delay
+      setTimeout(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+        }
+      }, 50);
+
+      // Add user message to conversation
+      if (onConversationMessage) {
+        onConversationMessage({
+          id: `user-${Date.now()}`,
+          user_id: 'me',
+          user_name: 'You',
+          content: message,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+  }, [onConversationMessage]);
+
+  // Expose send function via ref
+  useEffect(() => {
+    if (sendRef) {
+      sendRef.current = connected ? sendMessage : null;
+    }
+  }, [sendRef, sendMessage, connected]);
+
+  // Notify parent of connection changes
+  useEffect(() => {
+    onConnectionChange?.(connected);
+  }, [connected, onConnectionChange]);
 
   // Initialize xterm.js - dynamically import to avoid SSR issues
   useEffect(() => {
@@ -159,6 +228,55 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
         if (msg.type === 'output' && xtermRef.current) {
           // Write directly to xterm - it handles all escape codes natively!
           xtermRef.current.write(msg.data);
+
+          // Parse output for chat log - look for Claude responses and user prompts
+          const cleanData = msg.data.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
+
+          // Look for Claude response (● prefix)
+          const responseMatch = cleanData.match(/●\s*(.+?)(?:\r|\n|$)/);
+          if (responseMatch && responseMatch[1].trim()) {
+            const content = responseMatch[1].trim();
+
+            // Legacy ChatLogMessage format
+            if (onMessage) {
+              onMessage({
+                id: `claude-${Date.now()}`,
+                source: 'claude',
+                role: 'assistant',
+                content: content,
+                timestamp: new Date()
+              });
+            }
+
+            // New ConversationMessage format for AI Team Chat
+            if (onConversationMessage) {
+              onConversationMessage({
+                id: `claude-${Date.now()}`,
+                user_id: 'claude',
+                user_name: 'Claude',
+                content: content,
+                created_at: new Date().toISOString(),
+              });
+            }
+          }
+
+          // Look for user prompt (> prefix with content, but not empty)
+          // Only use this for legacy onMessage - AI Team Chat handles user messages separately
+          if (onMessage) {
+            const promptMatch = cleanData.match(/>\s*([^>\n]+?)(?:\r|\n|$)/);
+            if (promptMatch && promptMatch[1].trim() && !promptMatch[1].includes('Try "')) {
+              const content = promptMatch[1].trim();
+              if (content.length > 2 && !content.startsWith('Try')) {
+                onMessage({
+                  id: `user-${Date.now()}`,
+                  source: 'claude',
+                  role: 'user',
+                  content: content,
+                  timestamp: new Date()
+                });
+              }
+            }
+          }
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
