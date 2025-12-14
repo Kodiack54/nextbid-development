@@ -177,5 +177,61 @@ CREATE TRIGGER trigger_update_session_stats
     EXECUTE FUNCTION update_session_stats();
 
 -- ============================================
+-- 7. DEV_SESSION_SCRUBBING - Full extracted data from sessions
+-- ============================================
+CREATE TABLE IF NOT EXISTS dev_session_scrubbing (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    session_id UUID REFERENCES dev_chat_sessions(id),
+    user_id UUID REFERENCES dev_users(id),
+    project_id UUID REFERENCES dev_projects(id),
+
+    -- Full extracted data from Claude
+    extracted_data JSONB NOT NULL,
+
+    -- Status
+    scrubbing_status VARCHAR(20) DEFAULT 'pending',  -- pending, processing, completed, failed
+    scrubbing_error TEXT,
+
+    -- Usage tracking
+    tokens_used INT DEFAULT 0,
+    cost_usd DECIMAL(10, 6) DEFAULT 0,
+
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_session_scrubbing_session ON dev_session_scrubbing(session_id);
+CREATE INDEX idx_session_scrubbing_project ON dev_session_scrubbing(project_id);
+CREATE INDEX idx_session_scrubbing_user ON dev_session_scrubbing(user_id);
+
+-- ============================================
+-- 8. DEV_PROJECT_KNOWLEDGE - Accumulated knowledge per project
+-- ============================================
+CREATE TABLE IF NOT EXISTS dev_project_knowledge (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    project_id UUID NOT NULL REFERENCES dev_projects(id),
+
+    -- Aggregated knowledge
+    accumulated_context TEXT,              -- Combined context from all sessions
+    key_decisions JSONB,                   -- All decisions made across sessions
+    known_issues JSONB,                    -- Accumulated issues/blockers
+    tech_notes JSONB,                      -- Technical notes
+    api_endpoints JSONB,                   -- All endpoints discovered
+    database_schema JSONB,                 -- Accumulated schema knowledge
+
+    -- Auto-generated docs
+    generated_readme TEXT,
+    generated_todo TEXT,
+    generated_changelog TEXT,
+
+    -- Metadata
+    last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_session_id UUID REFERENCES dev_chat_sessions(id),
+    total_sessions_analyzed INT DEFAULT 0
+);
+
+CREATE INDEX idx_project_knowledge_project ON dev_project_knowledge(project_id);
+
+-- ============================================
 -- Done! Tables created successfully.
 -- ============================================
