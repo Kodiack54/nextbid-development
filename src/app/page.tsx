@@ -249,7 +249,7 @@ export default function DevEnvironmentPage() {
       const chatMessages = [...messages.slice(1), { role: 'user' as const, content: userMessage }];
 
       // Claude mode uses Sonnet (smarter), Chad mode uses Haiku (faster/cheaper)
-      const model = chatMode === 'claude' ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022';
+      const model = chatMode === 'claude' ? 'claude-sonnet-4-20250514' : 'claude-3-5-haiku-latest';
 
       // Different system prompts for Claude vs Chad - Kodiack AI Team
       const claudePrompt = `You are Claude, the LEAD PROGRAMMER at Kodiack Studios AI Team.
