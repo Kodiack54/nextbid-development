@@ -118,12 +118,15 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
           data = data.replace(/\x1b\[\?2004[hl]/g, '');
           // Remove window title sequences
           data = data.replace(/\x1b\]0;[^\x07]*\x07/g, '');
+          // Remove cursor movement/clear line sequences
+          data = data.replace(/\x1b\[[0-9]*[ABCDJKGH]/g, '');
+          data = data.replace(/\x1b\[[0-9;]*[suhl]/g, '');
           // Remove other common control sequences
           data = data.replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
 
-          // Split by newlines and add each line
+          // Split by newlines and add each line (keep lines with box chars even if no text)
           const lines = data.split(/\r?\n/);
-          setOutput(prev => [...prev, ...lines.filter((l: string) => l.trim())]);
+          setOutput(prev => [...prev, ...lines.filter((l: string) => l.length > 0)]);
         } else if (msg.type === 'exit') {
           setOutput(prev => [...prev, `\x1b[33m[Process exited: ${msg.code}]\x1b[0m`]);
           setConnected(false);
