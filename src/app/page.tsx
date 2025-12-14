@@ -7,10 +7,8 @@ import { DoorOpen } from 'lucide-react';
 import { useUser, useMinRole } from './contexts/UserContext';
 import { useSession } from '../hooks/useSession';
 
-// Components
-import ChatDropdown from '../components/ChatDropdown';
-import TimeClockDropdown from '../components/TimeClockDropdown';
-import SettingsDropdown from '../components/SettingsDropdown';
+// Dropdowns
+import { ChatDropdown, TimeClockDropdown, SettingsDropdown } from '../components/dropdowns';
 
 // Panels
 import {
