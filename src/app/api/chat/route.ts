@@ -17,7 +17,12 @@ const ALLOWED_COMMANDS = ['npm', 'npx', 'git', 'ls', 'cat', 'head', 'tail', 'gre
 
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
+  'claude-haiku-3-5-20241022': { input: 0.80, output: 4.0 },  // 75% cheaper!
 };
+
+// Use Haiku by default for cost savings (switch to sonnet for complex tasks)
+const DEFAULT_MODEL = 'claude-haiku-3-5-20241022';
+const MAX_HISTORY_MESSAGES = 10; // Only send last 10 messages to reduce token usage
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
   const pricing = MODEL_PRICING[model] || { input: 3.0, output: 15.0 };
@@ -141,7 +146,7 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   try {
     const body = await request.json();
-    const { messages, user_id, project_id, project_path, model = 'claude-sonnet-4-20250514', system_prompt } = body;
+    const { messages, user_id, project_id, project_path, model = DEFAULT_MODEL, system_prompt } = body;
 
     if (!messages?.length) return new Response(JSON.stringify({ error: 'messages required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     if (!user_id) return new Response(JSON.stringify({ error: 'user_id required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -192,13 +197,17 @@ Let's build something great.`;
       return res.json();
     }
 
-    // Sanitize messages - Anthropic API only accepts role and content
-    let currentMsgs = messages.map((m: any) => ({ role: m.role, content: m.content }));
+    // Sanitize and truncate messages to save tokens
+    const sanitized = messages.map((m: any) => ({ role: m.role, content: m.content }));
+    // Only keep last N messages to reduce token usage (keep at least 2 for context)
+    let currentMsgs = sanitized.length > MAX_HISTORY_MESSAGES
+      ? sanitized.slice(-MAX_HISTORY_MESSAGES)
+      : sanitized;
     let finalResponse: any = null;
     let totalIn = 0, totalOut = 0;
     const toolLog: string[] = [];
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) { // Reduced from 10 to 5 for cost savings
       const response = await callClaude(currentMsgs);
       totalIn += response.usage?.input_tokens || 0;
       totalOut += response.usage?.output_tokens || 0;

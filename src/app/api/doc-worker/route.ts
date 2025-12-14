@@ -56,14 +56,14 @@ async function extractInfoFromMessages(messages: any[]): Promise<ExtractedInfo> 
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
+      model: 'claude-haiku-3-5-20241022', // Use Haiku for cost savings (75% cheaper)
+      max_tokens: 1024, // Reduced for cost savings
       messages: [{
         role: 'user',
         content: `Analyze this development conversation and extract key information. Return ONLY valid JSON.
 
 CONVERSATION:
-${conversationText.slice(0, 15000)}
+${conversationText.slice(0, 8000)}
 
 Return this exact JSON structure:
 {
