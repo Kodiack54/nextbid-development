@@ -219,10 +219,18 @@ export function DocsPanel({ projectPath, workerStatus, onTriggerWorker }: DocsPa
           {workerStatus && (
             <button
               onClick={onTriggerWorker}
-              className={}
+              className={`px-2 py-1 text-xs rounded ${
+                workerStatus === 'running'
+                  ? 'bg-yellow-600/20 text-yellow-400'
+                  : workerStatus === 'success'
+                  ? 'bg-green-600/20 text-green-400'
+                  : workerStatus === 'error'
+                  ? 'bg-red-600/20 text-red-400'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
               title="Auto-doc worker (runs every 5 min)"
             >
-              {workerStatus === 'running' ? '⏳' : '🤖'} Auto-Doc
+              {workerStatus === 'running' ? 'Working...' : 'Auto-Doc'}
             </button>
           )}
           <button
