@@ -112,6 +112,9 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output') {
+          // Debug: log raw data to see what's coming through
+          console.log('[ClaudeTerminal] Raw output:', JSON.stringify(msg.data).slice(0, 200));
+
           // Filter out terminal control sequences we don't need
           let data = msg.data;
           // Remove bracketed paste mode sequences
