@@ -128,9 +128,10 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
 
     setConnecting(true);
 
-    // Determine WebSocket URL - Claude Code terminal on port 5400
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const wsEndpoint = wsUrl || `ws://${host}:5400`;
+    // Connect directly to Dev droplet terminal server on port 5400
+    // This works regardless of how user accesses dev-studio (direct or through gateway)
+    const DEV_DROPLET = '161.35.229.220';
+    const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
 
     const ws = new WebSocket(fullUrl);
@@ -255,9 +256,14 @@ export function ClaudeTerminal({ projectPath = '/var/www/NextBid_Dev/dev-studio-
       {/* Terminal */}
       <div
         ref={terminalRef}
-        className="flex-1 p-1 cursor-text"
-        style={{ minHeight: '300px' }}
-        onClick={() => xtermRef.current?.focus()}
+        tabIndex={0}
+        className="flex-1 p-1"
+        style={{ minHeight: '300px', outline: 'none' }}
+        onClick={() => {
+          xtermRef.current?.focus();
+          terminalRef.current?.focus();
+        }}
+        onFocus={() => xtermRef.current?.focus()}
       />
     </div>
   );

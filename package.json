@@ -6,7 +6,9 @@
     "dev": "next dev -p 5000",
     "build": "next build",
     "start": "next start -p 5000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "terminal": "node terminal-server.js",
+    "dev:all": "npm run terminal & npm run dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -16,6 +18,7 @@
     "@xterm/xterm": "^5.5.0",
     "lucide-react": "^0.561.0",
     "next": "^15.1.0",
+    "node-pty": "^1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ws": "^8.18.3"
