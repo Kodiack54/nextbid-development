@@ -327,6 +327,17 @@ export function ClaudeTerminal({
             wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
           }
         }, 50);
+
+        // Log to conversation (for AI Team Chat to display)
+        if (onConversationMessage) {
+          onConversationMessage({
+            id: `user-${Date.now()}`,
+            user_id: 'me',
+            user_name: 'You',
+            content: inputValue.trim(),
+            created_at: new Date().toISOString(),
+          });
+        }
       } else {
         // Just send Enter for empty input (confirmations, etc.)
         wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
@@ -335,7 +346,7 @@ export function ClaudeTerminal({
     } else {
       console.log('[ClaudeTerminal] WebSocket not open');
     }
-  }, [inputValue, connected]);
+  }, [inputValue, connected, onConversationMessage]);
 
   return (
     <div className="flex flex-col h-full bg-gray-900">

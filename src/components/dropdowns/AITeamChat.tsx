@@ -400,45 +400,40 @@ export default function AITeamChat({
                   </div>
                 )}
 
-                {messages.map(msg => (
-                  <div key={msg.id} className={`flex gap-3 ${msg.user_id === 'me' || msg.user_id === userId ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
-                      msg.user_id === 'me' || msg.user_id === userId
-                        ? 'bg-gray-600'
-                        : activeMember === 'claude'
-                          ? 'bg-orange-900/50'
-                          : activeMember === 'chad'
-                            ? 'bg-blue-900/50'
-                            : 'bg-purple-900/50'
-                    }`}>
-                      {msg.user_id === 'me' || msg.user_id === userId
-                        ? '👤'
-                        : activeMember === 'claude'
-                          ? '👨‍💻'
-                          : activeMember === 'chad'
-                            ? '🧑‍💻'
-                            : '👩‍💼'
-                      }
-                    </div>
-                    <div className={`flex-1 min-w-0 ${msg.user_id === 'me' || msg.user_id === userId ? 'text-right' : ''}`}>
-                      <div className={`flex items-center gap-2 ${msg.user_id === 'me' || msg.user_id === userId ? 'justify-end' : ''}`}>
-                        <span className="text-white text-sm font-medium">{msg.user_name}</span>
-                        <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
-                      </div>
-                      <p className={`text-gray-300 text-sm mt-0.5 break-words ${
-                        msg.user_id === 'me' || msg.user_id === userId
-                          ? 'bg-gray-700 inline-block px-3 py-1.5 rounded-lg'
+                {messages.map(msg => {
+                  const isUser = msg.user_id === 'me' || msg.user_id === userId;
+                  return (
+                    <div key={msg.id} className="flex gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
+                        isUser
+                          ? 'bg-gray-600'
                           : activeMember === 'claude'
-                            ? 'bg-orange-900/30 inline-block px-3 py-1.5 rounded-lg'
+                            ? 'bg-orange-900/50'
                             : activeMember === 'chad'
-                              ? 'bg-blue-900/30 inline-block px-3 py-1.5 rounded-lg'
-                              : 'bg-purple-900/30 inline-block px-3 py-1.5 rounded-lg'
+                              ? 'bg-blue-900/50'
+                              : 'bg-purple-900/50'
                       }`}>
-                        {msg.content}
-                      </p>
+                        {isUser
+                          ? '👤'
+                          : activeMember === 'claude'
+                            ? '👨‍💻'
+                            : activeMember === 'chad'
+                              ? '🧑‍💻'
+                              : '👩‍💼'
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white text-sm font-medium">{msg.user_name}</span>
+                          <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
+                        </div>
+                        <p className="text-gray-300 text-sm mt-0.5 break-words">
+                          {msg.content}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {isTyping && (
                   <div className="flex gap-3">
