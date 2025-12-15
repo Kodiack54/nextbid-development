@@ -25,6 +25,7 @@ import {
   DocsPanel,
   ClaudeTerminal,
 } from '../components/panels';
+import ProjectManagementPanel from './project-management/ProjectManagementPanel';
 import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
 import type { ConversationMessage } from '../components/panels/ClaudeTerminal';
 // Claude uses Terminal (subscription), Chad uses API chat
@@ -647,13 +648,7 @@ User: The Boss`;
               { id: 'docs', icon: '📝', label: 'Docs' },
             ]}
             activePanel={activePanel}
-            onPanelChange={(panel) => {
-              if (panel === 'projects') {
-                window.location.href = '/project-management';
-              } else {
-                setActivePanel(panel as typeof activePanel);
-              }
-            }}
+            onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
           />
 
           <div className="flex-1" />
@@ -723,89 +718,98 @@ User: The Boss`;
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
-            <div className="flex items-center gap-3">
-              <select
-                value={selectedProject?.id || ''}
-                onChange={(e) => {
-                  const project = projects.find(p => p.id === e.target.value);
-                  setSelectedProject(project || null);
-                }}
-                className="w-48 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-white text-sm"
-              >
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.is_locked ? '🔒 ' : ''}{project.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedEnv.id}
-                onChange={(e) => {
-                  const env = ENVIRONMENTS.find(env => env.id === e.target.value);
-                  if (env) setSelectedEnv(env);
-                }}
-                className="w-48 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-white text-sm"
-              >
-                {ENVIRONMENTS.map(env => (
-                  <option key={env.id} value={env.id}>
-                    {env.name} {env.readOnly ? '(Read Only)' : ''}
-                  </option>
-                ))}
-              </select>
-
-              <div className="flex gap-1 ml-2 border-l border-gray-600 pl-3">
-                <QuickButton label="Explain" onClick={() => setInputMessage('Explain this code')} />
-                <QuickButton label="Review" onClick={() => setInputMessage('Review this code for bugs')} />
-                <QuickButton label="Refactor" onClick={() => setInputMessage('Refactor this code')} />
-                <QuickButton label="Document" onClick={() => setInputMessage('Add documentation')} />
-              </div>
+          {activePanel === 'projects' ? (
+            /* Project Management View */
+            <div className="flex-1 flex flex-col overflow-hidden bg-gray-900 p-4">
+              <ProjectManagementPanel onProjectsChange={fetchProjects} />
             </div>
-
-            <div className="flex items-center gap-2">
-              {selectedProject?.is_locked ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-yellow-400">
-                    🔒 Locked by {selectedProject.lock?.locked_by_name}
-                  </span>
-                  <button
-                    onClick={() => setShowUnlockModal(true)}
-                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-sm rounded-lg"
+          ) : (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                <div className="flex items-center gap-3">
+                  <select
+                    value={selectedProject?.id || ''}
+                    onChange={(e) => {
+                      const project = projects.find(p => p.id === e.target.value);
+                      setSelectedProject(project || null);
+                    }}
+                    className="w-48 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-white text-sm"
                   >
-                    Unlock
-                  </button>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.is_locked ? '🔒 ' : ''}{project.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedEnv.id}
+                    onChange={(e) => {
+                      const env = ENVIRONMENTS.find(env => env.id === e.target.value);
+                      if (env) setSelectedEnv(env);
+                    }}
+                    className="w-48 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-white text-sm"
+                  >
+                    {ENVIRONMENTS.map(env => (
+                      <option key={env.id} value={env.id}>
+                        {env.name} {env.readOnly ? '(Read Only)' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex gap-1 ml-2 border-l border-gray-600 pl-3">
+                    <QuickButton label="Explain" onClick={() => setInputMessage('Explain this code')} />
+                    <QuickButton label="Review" onClick={() => setInputMessage('Review this code for bugs')} />
+                    <QuickButton label="Refactor" onClick={() => setInputMessage('Refactor this code')} />
+                    <QuickButton label="Document" onClick={() => setInputMessage('Add documentation')} />
+                  </div>
                 </div>
-              ) : (
-                <button
-                  onClick={handleLockProject}
-                  disabled={isLocking}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg disabled:opacity-50"
-                >
-                  {isLocking ? 'Locking...' : '🔓 Lock Project'}
-                </button>
-              )}
-            </div>
-          </div>
 
-          {/* Main Area - Browser + Chat */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Browser Preview - 2/3 */}
-            <div className="flex-[2] min-w-0 flex flex-col border-r border-gray-700 bg-gray-900">
-              <BrowserPreview project={selectedProject} env={selectedEnv} userId={user?.id} />
-            </div>
+                <div className="flex items-center gap-2">
+                  {selectedProject?.is_locked ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-yellow-400">
+                        🔒 Locked by {selectedProject.lock?.locked_by_name}
+                      </span>
+                      <button
+                        onClick={() => setShowUnlockModal(true)}
+                        className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-sm rounded-lg"
+                      >
+                        Unlock
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleLockProject}
+                      disabled={isLocking}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg disabled:opacity-50"
+                    >
+                      {isLocking ? 'Locking...' : '🔓 Lock Project'}
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            {/* Claude Code Terminal - 1/3 */}
-            <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
-              <ClaudeTerminal
-                sendRef={claudeSendRef}
-                connectRef={claudeConnectRef}
-                onConversationMessage={handleClaudeConversation}
-                onConnectionChange={setClaudeConnected}
-              />
-            </div>
-          </div>
+              {/* Main Area - Browser + Chat */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Browser Preview - 2/3 */}
+                <div className="flex-[2] min-w-0 flex flex-col border-r border-gray-700 bg-gray-900">
+                  <BrowserPreview project={selectedProject} env={selectedEnv} userId={user?.id} />
+                </div>
+
+                {/* Claude Code Terminal - 1/3 */}
+                <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
+                  <ClaudeTerminal
+                    sendRef={claudeSendRef}
+                    connectRef={claudeConnectRef}
+                    onConversationMessage={handleClaudeConversation}
+                    onConnectionChange={setClaudeConnected}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Unlock Modal */}
           {showUnlockModal && (
