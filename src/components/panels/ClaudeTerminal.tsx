@@ -99,15 +99,8 @@ export function ClaudeTerminal({
   const [susanContext, setSusanContext] = useState<SusanContext | null>(null);
   const susanContextRef = useRef<SusanContext | null>(null); // Ref for WebSocket closure access
 
-  // Response buffering for better message parsing
-  const responseBufferRef = useRef<string>('');
-  const lastMessageTimeRef = useRef<number>(0);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSentMessageRef = useRef<string>('');
-  const recentMessagesRef = useRef<Set<string>>(new Set()); // Track recent message signatures
-  const recentUserInputsRef = useRef<Set<string>>(new Set()); // Track recent user inputs to filter echo
-  const susanBriefingSentRef = useRef<boolean>(false); // Session-level Susan briefing tracking
-  const inSusanBriefingRef = useRef<boolean>(false); // Track if currently inside a briefing block
+  // Note: Message extraction/filtering is now handled by Chad server-side
+  // Chad broadcasts clean conversation_message events to the frontend
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -157,17 +150,7 @@ export function ClaudeTerminal({
         });
       }
 
-      // Track user input to filter echo from terminal output
-      // Store the FULL message for substring matching (not individual words - that's too aggressive)
-      const msgLower = message.toLowerCase();
-      recentUserInputsRef.current.add(msgLower);
-      // Also add without leading/trailing spaces
-      recentUserInputsRef.current.add(msgLower.trim());
-      // Auto-expire after 15 seconds
-      setTimeout(() => {
-        recentUserInputsRef.current.delete(msgLower);
-        recentUserInputsRef.current.delete(msgLower.trim());
-      }, 15000);
+      // Note: Echo filtering now handled by Chad server-side
     }
   }, [onConversationMessage]);
 
@@ -316,6 +299,18 @@ export function ClaudeTerminal({
           if (msg.type === 'session_started' || msg.type === 'session_created') {
             chadSessionIdRef.current = msg.sessionId;
             console.log('[ClaudeTerminal] Chad session started:', msg.sessionId);
+          } else if (msg.type === 'conversation_message') {
+            // Chad extracted a clean message - display it in chat
+            console.log('[ClaudeTerminal] Chat message from Chad:', msg.content?.slice(0, 50));
+            if (onConversationMessage && msg.content) {
+              onConversationMessage({
+                id: msg.id || `chad-${Date.now()}`,
+                user_id: msg.user_id || 'claude',
+                user_name: msg.user_name || 'Claude',
+                content: msg.content,
+                created_at: msg.created_at || new Date().toISOString()
+              });
+            }
           }
         } catch (err) {
           console.log('[ClaudeTerminal] Chad message parse error:', err);
@@ -473,279 +468,8 @@ export function ClaudeTerminal({
             }
           }
 
-          // Buffer ALL response text - filter TUI noise
-          // Chad gets raw data via sendToChad() for full logging
-          const lines = cleanData.split(/[\r\n]+/);
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-
-            // Skip TUI noise (spinners, status, prompts, echoes):
-            // - Susan briefing duplicate detection at LINE level
-            // Track entering/exiting briefing blocks
-            if (trimmedLine.includes('=== SUSAN') && trimmedLine.includes('BRIEFING')) {
-              if (susanBriefingSentRef.current) {
-                inSusanBriefingRef.current = true; // We're in a duplicate briefing
-                continue;
-              }
-              // First briefing - let it through
-              susanBriefingSentRef.current = true;
-            }
-            if (trimmedLine.includes('=== END BRIEFING ===')) {
-              if (inSusanBriefingRef.current) {
-                inSusanBriefingRef.current = false; // Exit duplicate briefing block
-                continue;
-              }
-            }
-            // Skip all lines while inside a duplicate briefing block
-            if (inSusanBriefingRef.current) continue;
-            // - Skip repeated "Ready to continue" lines (Susan briefing footer)
-            if (trimmedLine.includes('Ready to continue where we left off')) {
-              if (susanBriefingSentRef.current) continue; // Only allow first one
-            }
-            // - Empty lines at very start
-            if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
-            // - Shell prompts
-            if (trimmedLine === '$' || trimmedLine === '%' || trimmedLine === '>') continue;
-            if (trimmedLine.startsWith('❯')) continue;
-            // - User input echo (lines starting with > followed by text)
-            if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
-            if (trimmedLine.startsWith('>') && !trimmedLine.startsWith('> ===')) continue; // Also catch >text without space
-            // - Short user input echo (just > followed by 1-3 chars, like "> k" or "> y")
-            if (/^>\s*[a-zA-Z0-9]{1,3}$/.test(trimmedLine)) continue;
-            // - Longer user input echo (user messages getting echoed back)
-            if (/^>\s*\w+/.test(trimmedLine) && !trimmedLine.includes('===')) continue;
-            // - TUI instruction/tip lines
-            if (trimmedLine.includes('Enter to select')) continue;
-            if (trimmedLine.includes('Tab/Arrow keys')) continue;
-            if (trimmedLine.includes('Esc to cancel')) continue;
-            if (trimmedLine.includes('to navigate')) continue;
-            if (trimmedLine.includes('Press up to edit')) continue;
-            if (trimmedLine.includes('queued messages')) continue;
-            if (trimmedLine.startsWith('⎿')) continue; // Tip indicator
-            if (trimmedLine.includes('Tip: Run /')) continue;
-            if (trimmedLine.includes('/install-github-app')) continue;
-            if (trimmedLine.includes('/resume later')) continue;
-            if (trimmedLine.includes('terminal?')) continue; // Filter ANY line with terminal?
-            if (trimmedLine.includes('asted text #')) continue; // "Pasted text #1" indicator
-            if (trimmedLine.includes('+1 lines]')) continue; // Paste line count indicator
-            // - Guest passes notification spam
-            if (trimmedLine.includes('guest passes')) continue;
-            if (trimmedLine.includes('/passes')) continue;
-            if (trimmedLine.includes('CC ✻')) continue; // Claude Code branding icon
-            if (trimmedLine.includes('┊ (')) continue; // Status bar separator
-            // - TUI turn indicator spam
-            if (trimmedLine === 'that turn' || trimmedLine.includes('that turn')) continue;
-            // - Spinner characters (all the fancy ones Claude Code uses)
-            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
-            // - Status lines (Ideating, Thinking, Unfurling, shortcuts hints)
-            if (/^[·✢✶✻✽*•∴]?\s*(Ideating|Thinking|Thought|Unfurling)/.test(trimmedLine)) continue;
-            if (trimmedLine.includes('(esc to interrupt)')) continue;
-            if (trimmedLine.includes('esc to interrupt')) continue; // Without parens
-            if (trimmedLine.includes('for shortcuts')) continue;
-            if (trimmedLine.includes('ctrl+o to show')) continue;
-            if (trimmedLine.includes('ctrl+o to expand')) continue; // Expand hint
-            if (trimmedLine.includes('ctrl-g to edit')) continue;
-            // - Claude Code UI chrome
-            if (trimmedLine.startsWith('Try "')) continue;
-            if (trimmedLine.startsWith('Try \'')) continue;
-            if (trimmedLine.includes('Try "')) continue; // Catch mid-line suggestions too
-            if (trimmedLine === '?' || trimmedLine === '? ') continue;
-            // NOTE: Welcome banner, boxes, and ASCII art are ALLOWED through
-            // Only filtering actual TUI spam that repeats 50+ times
-            // - TUI separator lines - ONLY pure horizontal lines (no corners/edges)
-            // These are box-drawing horizontal chars: ─ (2500), ━ (2501), ═ (2550)
-            // Box corners/edges we KEEP: ┌┐└┘├┤┬┴┼│ etc.
-            if (/^[─━═\-]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure horizontal separator spam
-            // Don't filter lines with corners - they're part of boxes!
-            // - Empty standalone bullet markers (not part of content)
-            // Use regex to catch bullets with any trailing whitespace
-            if (/^[•●]\s*$/.test(trimmedLine)) continue;
-            if (trimmedLine === '-' || trimmedLine === '*') continue;
-
-            // Strip leading bullet markers from lines WITH content (keep the content)
-            // Do this at line level before buffering for more reliable removal
-            if (/^[•●]/.test(trimmedLine)) {
-              const strippedLine = trimmedLine.replace(/^[•●]\s*/, '');
-              if (strippedLine.length > 0) {
-                responseBufferRef.current += strippedLine + '\n';
-                continue;
-              }
-            }
-            // - Tool call status lines (● Search, ● Bash, ● Read, etc.)
-            if (/^●?\s*(Search|Bash|Read|Write|Edit|Glob|Grep|Task)\s*\(/.test(trimmedLine)) continue;
-            // - Tool output noise
-            if (trimmedLine.startsWith('drwxr-xr-x')) continue; // ls -la output
-            if (trimmedLine.startsWith('-rw-r--r--')) continue; // ls -la files
-            if (trimmedLine.includes('… +') && trimmedLine.includes('lines')) continue; // Truncation indicator
-            // - Token/timing status
-            if (/↓\s*[\d.]+k?\s*tokens/.test(trimmedLine)) continue; // Token count indicators
-
-            // Filter echoed user input (terminal echoes what you type, wrapped across lines)
-            const lineLower = trimmedLine.toLowerCase();
-            // Check if this line is a SUBSTRING of any recent user message
-            // This catches terminal-wrapped echoes without blocking legitimate responses
-            let isEchoedInput = false;
-            for (const trackedMsg of recentUserInputsRef.current) {
-              // Skip very short tracked messages (avoid false positives)
-              if (trackedMsg.length < 10) continue;
-              // Check if line is a substring of user's message (terminal line-wrapping)
-              if (trackedMsg.includes(lineLower) && lineLower.length > 5) {
-                isEchoedInput = true;
-                break;
-              }
-              // Check if user's message starts with this line (partial echo)
-              if (trackedMsg.startsWith(lineLower) && lineLower.length > 5) {
-                isEchoedInput = true;
-                break;
-              }
-            }
-            if (isEchoedInput) continue;
-
-            // Everything else goes through - INCLUDING box drawing!
-            // Preserve original indentation (use line, not trimmedLine)
-            if (trimmedLine.length === 0) {
-              // Only add blank line if last char isn't already a newline (prevent gaps)
-              if (!responseBufferRef.current.endsWith('\n\n')) {
-                responseBufferRef.current += '\n';
-              }
-            } else {
-              // Keep original line to preserve indentation
-              responseBufferRef.current += line + '\n';
-            }
-          }
-
-          // Detect if Claude's response is complete (prompt reappeared)
-          const isResponseComplete = cleanData.includes('❯') ||
-                                     cleanData.includes('> ') ||
-                                     cleanData.includes('? ') ||  // Question prompt
-                                     cleanData.match(/\n>\s*$/);  // Prompt at end of line
-
-          // Function to send buffered content to chat
-          const sendBufferedContent = () => {
-            let bufferedContent = responseBufferRef.current.trim();
-
-            // Post-process content for cleaner formatting
-            // 1. Remove • markers at start of lines (TUI noise)
-            // They appear before actual content or on their own
-            bufferedContent = bufferedContent.replace(/^[•●]\s*\n/gm, ''); // Standalone bullet + newline
-            bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');  // Standalone bullet at end
-            bufferedContent = bufferedContent.replace(/^[•●]\s*/gm, '');   // Bullet at start of line (with or without space)
-            // 2. Join numbered items split across lines (1.\n  Second → 1. Second)
-            // Handle various formats: "1.\n", "1. \n", "1.\nSecond", etc.
-            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n\s*(\S)/gm, '$1 $2');
-            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n/gm, '$1 ');
-            // 3. Normalize bullet spacing
-            bufferedContent = bufferedContent.replace(/^(\s*)-\s+/gm, '$1- ');
-            // 4. Remove • prefix if followed by - (redundant marker)
-            bufferedContent = bufferedContent.replace(/^•\s*-\s*/gm, '- ');
-            // 5. Clean up multiple consecutive newlines
-            bufferedContent = bufferedContent.replace(/\n{3,}/g, '\n\n');
-            // 6. Normalize indentation - trim trailing but keep leading structure
-            bufferedContent = bufferedContent.split('\n').map(line => {
-              // Keep intentional indentation (2+ spaces) but trim trailing whitespace
-              const leadingMatch = line.match(/^(\s+)/);
-              if (leadingMatch) {
-                return leadingMatch[1] + line.trimEnd().slice(leadingMatch[1].length);
-              }
-              return line.trim();
-            }).join('\n');
-            // 7. Final trim
-            bufferedContent = bufferedContent.trim();
-
-            // Only send if we have meaningful content (lowered to 3 to allow short messages)
-            if (bufferedContent.length > 3) {
-              // Create multiple signatures for robust dedup:
-              // 1. First 100 chars (catches similar starts)
-              // 2. Normalized content hash (catches identical content with whitespace differences)
-              const normalizedContent = bufferedContent.replace(/\s+/g, ' ').trim();
-              const shortSig = normalizedContent.slice(0, 100);
-              const fullSig = normalizedContent.slice(0, 500); // Longer signature for better matching
-
-              // Skip if we've seen similar content recently
-              if (recentMessagesRef.current.has(shortSig) || recentMessagesRef.current.has(fullSig)) {
-                responseBufferRef.current = '';
-                return;
-              }
-
-              // Skip Susan briefing duplicates (session-level - only send ONCE per connection)
-              if (bufferedContent.includes('SUSAN') && bufferedContent.includes('BRIEFING')) {
-                if (susanBriefingSentRef.current) {
-                  responseBufferRef.current = '';
-                  return;
-                }
-                susanBriefingSentRef.current = true; // Mark as sent for entire session
-              }
-
-              // Skip echoed user instructions (long prompts that get echoed back)
-              if (bufferedContent.includes('Run these tests in order') ||
-                  bufferedContent.includes('Wait for my y/n') ||
-                  bufferedContent.includes('Start with Test 1')) {
-                responseBufferRef.current = '';
-                return;
-              }
-
-              // Add signatures to recent set and auto-expire
-              recentMessagesRef.current.add(shortSig);
-              recentMessagesRef.current.add(fullSig);
-              setTimeout(() => {
-                recentMessagesRef.current.delete(shortSig);
-                recentMessagesRef.current.delete(fullSig);
-              }, 30000); // Increased to 30 seconds
-
-              // Skip only actual command execution output (not grids Claude intentionally shows)
-              const isToolOutput = bufferedContent.includes('curl ') ||
-                                   bufferedContent.includes('npm install') ||
-                                   bufferedContent.includes('node_modules');
-
-              if (!isToolOutput) {
-                lastSentMessageRef.current = bufferedContent;
-
-                if (onMessage) {
-                  onMessage({
-                    id: `claude-${Date.now()}`,
-                    source: 'claude',
-                    role: 'assistant',
-                    content: bufferedContent,
-                    timestamp: new Date()
-                  });
-                }
-
-                if (onConversationMessage) {
-                  onConversationMessage({
-                    id: `claude-${Date.now()}`,
-                    user_id: 'claude',
-                    user_name: 'Claude',
-                    content: bufferedContent,
-                    created_at: new Date().toISOString(),
-                  });
-                }
-              }
-
-              responseBufferRef.current = '';
-            }
-          };
-
-          // If response is complete, send after a short delay (let buffer fill)
-          if (isResponseComplete && responseBufferRef.current.length > 3) {
-            if (debounceTimerRef.current) {
-              clearTimeout(debounceTimerRef.current);
-            }
-            // Small delay to let any final content arrive
-            debounceTimerRef.current = setTimeout(() => {
-              sendBufferedContent();
-              responseBufferRef.current = ''; // Clear after sending
-            }, 500);
-          } else {
-            // Otherwise debounce: Wait for output to settle before sending to chat
-            if (debounceTimerRef.current) {
-              clearTimeout(debounceTimerRef.current);
-            }
-
-            debounceTimerRef.current = setTimeout(() => {
-              sendBufferedContent();
-              responseBufferRef.current = ''; // Clear after sending
-            }, 3000); // Wait 3s for full response (reduced from 8s to minimize batching)
-          }
+          // Chat messages now come from Chad (via conversation_message events)
+          // No frontend filtering needed - Chad handles extraction and cleanup
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
@@ -785,9 +509,6 @@ export function ClaudeTerminal({
     setConnected(false);
     setMemoryStatus('idle');
     setSusanContext(null);
-    susanBriefingSentRef.current = false; // Reset for next connection
-    inSusanBriefingRef.current = false; // Reset briefing block tracking
-    recentMessagesRef.current.clear(); // Clear dedup cache
   }, []);
 
   // Expose connect function via ref (for click-to-connect from AI Team Chat)
