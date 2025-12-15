@@ -520,7 +520,9 @@ export function ClaudeTerminal({
             if (/^[─━═\-]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure horizontal separator spam
             // Don't filter lines with corners - they're part of boxes!
             // - Empty standalone bullet markers (not part of content)
-            if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
+            // Use regex to catch bullets with any trailing whitespace
+            if (/^[•●]\s*$/.test(trimmedLine)) continue;
+            if (trimmedLine === '-' || trimmedLine === '*') continue;
             // - Tool call status lines (● Search, ● Bash, ● Read, etc.)
             if (/^●?\s*(Search|Bash|Read|Write|Edit|Glob|Grep|Task)\s*\(/.test(trimmedLine)) continue;
             // - Tool output noise
