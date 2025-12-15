@@ -23,8 +23,13 @@ interface ChatChannel {
   last_message?: string;
   participants?: string[];
   isAI?: boolean;
-  aiType?: 'claude' | 'chad';
+  aiType?: 'claude' | 'chad' | 'susan';
 }
+
+// AI Worker URLs
+const DEV_DROPLET = '161.35.229.220';
+const CHAD_URL = `http://${DEV_DROPLET}:5401`;
+const SUSAN_URL = `http://${DEV_DROPLET}:5403`;
 
 const MIN_WIDTH = 450;
 const MIN_HEIGHT = 400;
@@ -80,7 +85,7 @@ export default function ChatDropdown({
       id: 'dm-claude',
       name: 'Claude',
       type: 'dm',
-      description: '👨‍💻 Lead Programmer',
+      description: '👨‍💻 Lead Programmer (5400)',
       unread_count: 0,
       isAI: true,
       aiType: 'claude',
@@ -89,12 +94,23 @@ export default function ChatDropdown({
       id: 'dm-chad',
       name: 'Chad',
       type: 'dm',
-      description: '🧑‍💻 Assistant / Transcriber',
+      description: '📝 Transcriber (5401)',
       unread_count: 0,
       isAI: true,
       aiType: 'chad',
     },
+    {
+      id: 'dm-susan',
+      name: 'Susan',
+      type: 'dm',
+      description: '📚 Librarian (5403)',
+      unread_count: 0,
+      isAI: true,
+      aiType: 'susan',
+    },
   ];
+
+  const [aiLoading, setAiLoading] = useState(false);
 
   const [directMessages, setDirectMessages] = useState<ChatChannel[]>([
     { id: 'dm1', name: 'Michael', type: 'dm', unread_count: 1, participants: ['Michael'] },
@@ -264,10 +280,10 @@ export default function ChatDropdown({
     ]);
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     if (!newMessage.trim() || !activeChannel) return;
 
-    const message: ChatMessage = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
       channel_id: activeChannel.id,
       user_id: 'me',
@@ -277,9 +293,64 @@ export default function ChatDropdown({
       is_code: isCodeMode
     };
 
-    setMessages(prev => [...prev, message]);
+    setMessages(prev => [...prev, userMessage]);
+    const messageToSend = newMessage;
     setNewMessage('');
     setIsCodeMode(false);
+
+    // Handle AI team members
+    if (activeChannel.isAI) {
+      if (activeChannel.aiType === 'claude') {
+        // Route to Claude terminal
+        onSendToClaudeTerminal?.(messageToSend);
+      } else if (activeChannel.aiType === 'chad' || activeChannel.aiType === 'susan') {
+        // Chat with Chad or Susan
+        setAiLoading(true);
+        try {
+          const apiUrl = activeChannel.aiType === 'chad' ? CHAD_URL : SUSAN_URL;
+          const response = await fetch(`${apiUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageToSend })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const aiReply: ChatMessage = {
+              id: `${activeChannel.aiType}-${Date.now()}`,
+              channel_id: activeChannel.id,
+              user_id: activeChannel.aiType,
+              user_name: activeChannel.name,
+              content: data.reply,
+              created_at: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, aiReply]);
+          } else {
+            const errorReply: ChatMessage = {
+              id: `error-${Date.now()}`,
+              channel_id: activeChannel.id,
+              user_id: activeChannel.aiType || 'error',
+              user_name: activeChannel.name,
+              content: `Sorry, I couldn't process that. (${response.status})`,
+              created_at: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, errorReply]);
+          }
+        } catch (err) {
+          const errorReply: ChatMessage = {
+            id: `error-${Date.now()}`,
+            channel_id: activeChannel.id,
+            user_id: activeChannel.aiType || 'error',
+            user_name: activeChannel.name,
+            content: `I'm not available right now. Check if my service is running on port ${activeChannel.aiType === 'chad' ? '5401' : '5403'}.`,
+            created_at: new Date().toISOString()
+          };
+          setMessages(prev => [...prev, errorReply]);
+        } finally {
+          setAiLoading(false);
+        }
+      }
+    }
   }
 
   function formatTime(dateStr: string) {
@@ -359,6 +430,32 @@ export default function ChatDropdown({
             {/* Left Sidebar - Channels */}
             <div className="w-48 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto">
+                {/* AI Team Section */}
+                <div className="p-2">
+                  <p className="text-purple-400 text-xs font-semibold uppercase px-2 mb-1">🤖 AI Team</p>
+                  {aiTeam.map(ai => (
+                    <button
+                      key={ai.id}
+                      onClick={() => {
+                        setActiveChannel(ai);
+                        setMessages([]);
+                      }}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm transition-colors ${
+                        activeChannel?.id === ai.id
+                          ? 'bg-purple-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      <Circle className={`w-3 h-3 flex-shrink-0 ${
+                        ai.aiType === 'claude'
+                          ? (claudeConnected ? 'fill-green-500 text-green-500' : 'fill-gray-500 text-gray-500')
+                          : 'fill-green-500 text-green-500'
+                      }`} />
+                      <span className="truncate flex-1">{ai.name}</span>
+                    </button>
+                  ))}
+                </div>
+
                 <div className="p-2">
                   <p className="text-gray-500 text-xs font-semibold uppercase px-2 mb-1">Channels</p>
                   {channels.map(channel => (
@@ -469,6 +566,12 @@ export default function ChatDropdown({
 
                   {/* Message Input */}
                   <div className="p-3 border-t border-gray-700 flex-shrink-0">
+                    {aiLoading && (
+                      <div className="flex items-center gap-2 text-purple-400 text-xs mb-2">
+                        <div className="animate-spin w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full" />
+                        <span>{activeChannel.name} is thinking...</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setIsCodeMode(!isCodeMode)}
@@ -486,7 +589,7 @@ export default function ChatDropdown({
                             onChange={(e) => setNewMessage(e.target.value)}
                             placeholder="Paste code here..."
                             className="w-full bg-gray-900 text-green-400 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono resize-none"
-                            rows={3}
+                            rows={5}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && e.ctrlKey) {
                                 sendMessage();
@@ -494,14 +597,18 @@ export default function ChatDropdown({
                             }}
                           />
                         ) : (
-                          <input
-                            type="text"
+                          <textarea
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
-                            placeholder={`Message #${activeChannel.name}`}
-                            className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder={activeChannel.isAI
+                              ? `Message ${activeChannel.name}... ${activeChannel.description || ''}`
+                              : `Message #${activeChannel.name}`
+                            }
+                            className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                            rows={3}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
                                 sendMessage();
                               }
                             }}
@@ -510,14 +617,19 @@ export default function ChatDropdown({
                       </div>
                       <button
                         onClick={sendMessage}
-                        disabled={!newMessage.trim()}
-                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!newMessage.trim() || aiLoading}
+                        className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          activeChannel.isAI ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
+                        } text-white`}
                       >
                         <Send className="w-4 h-4" />
                       </button>
                     </div>
                     {isCodeMode && (
                       <p className="text-gray-500 text-xs mt-1">Press Ctrl+Enter to send code</p>
+                    )}
+                    {!isCodeMode && (
+                      <p className="text-gray-500 text-xs mt-1">Press Enter to send, Shift+Enter for new line</p>
                     )}
                   </div>
                 </>

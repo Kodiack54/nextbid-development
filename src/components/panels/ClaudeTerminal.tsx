@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Power, PowerOff, FolderOpen } from 'lucide-react';
+import { Power, PowerOff, FolderOpen, Brain } from 'lucide-react';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -23,6 +23,20 @@ export interface ConversationMessage {
   created_at: string;
 }
 
+// Susan's startup context
+interface SusanContext {
+  greeting: string | null;
+  lastSession: {
+    id: string;
+    projectPath: string;
+    startedAt: string;
+    endedAt: string;
+    summary: string | null;
+  } | null;
+  recentMessages: Array<{ role: string; content: string; created_at: string }>;
+  relevantKnowledge: Array<{ category: string; title: string; summary: string }>;
+}
+
 interface ClaudeTerminalProps {
   projectPath?: string;
   wsUrl?: string;
@@ -35,6 +49,44 @@ interface ClaudeTerminalProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
+// AI Team worker URLs
+const DEV_DROPLET = '161.35.229.220';
+const CHAD_URL = `ws://${DEV_DROPLET}:5401`;
+const SUSAN_URL = `http://${DEV_DROPLET}:5403`;
+
+// Build context prompt to send to Claude on startup
+function buildContextPrompt(context: SusanContext): string {
+  const parts: string[] = [];
+
+  parts.push("Susan (your librarian) loaded your memory. Here's where we left off:");
+
+  if (context.lastSession) {
+    if (context.lastSession.summary) {
+      parts.push(`\nLast session: ${context.lastSession.summary}`);
+    }
+  }
+
+  if (context.recentMessages.length > 0) {
+    parts.push("\nRecent conversation:");
+    context.recentMessages.slice(-3).forEach(m => {
+      const role = m.role === 'user' ? 'User' : 'You';
+      const preview = m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content;
+      parts.push(`- ${role}: ${preview}`);
+    });
+  }
+
+  if (context.relevantKnowledge.length > 0) {
+    parts.push("\nKnowledge I remember:");
+    context.relevantKnowledge.slice(0, 3).forEach(k => {
+      parts.push(`- [${k.category}] ${k.title}`);
+    });
+  }
+
+  parts.push("\nLet me know what you'd like to continue working on.");
+
+  return parts.join('\n');
+}
+
 export function ClaudeTerminal({
   projectPath = '/var/www/NextBid_Dev/dev-studio-5000',
   wsUrl,
@@ -44,15 +96,25 @@ export function ClaudeTerminal({
   onConnectionChange,
 }: ClaudeTerminalProps) {
   const wsRef = useRef<WebSocket | null>(null);
+  const chadWsRef = useRef<WebSocket | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const messageBufferRef = useRef<string>('');
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const contextSentRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [memoryStatus, setMemoryStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [susanContext, setSusanContext] = useState<SusanContext | null>(null);
+
+  // Response buffering for better message parsing
+  const responseBufferRef = useRef<string>('');
+  const lastMessageTimeRef = useRef<number>(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSentMessageRef = useRef<string>('');
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -180,18 +242,65 @@ export function ClaudeTerminal({
     };
   }, []);
 
-  const connect = useCallback(() => {
+  // Fetch context from Susan before connecting
+  const fetchSusanContext = useCallback(async () => {
+    setMemoryStatus('loading');
+    try {
+      const response = await fetch(
+        `${SUSAN_URL}/api/context?project=${encodeURIComponent(projectPath)}`
+      );
+      if (response.ok) {
+        const context = await response.json();
+        setSusanContext(context);
+        setMemoryStatus('loaded');
+        return context;
+      }
+    } catch (err) {
+      console.log('[ClaudeTerminal] Susan not available:', err);
+    }
+    setMemoryStatus('error');
+    return null;
+  }, [projectPath]);
+
+  // Connect to Chad for transcription
+  const connectToChad = useCallback(() => {
+    try {
+      const chadWs = new WebSocket(`${CHAD_URL}?path=${encodeURIComponent(projectPath)}`);
+      chadWs.onopen = () => console.log('[ClaudeTerminal] Connected to Chad');
+      chadWs.onerror = () => console.log('[ClaudeTerminal] Chad not available');
+      chadWs.onclose = () => console.log('[ClaudeTerminal] Chad disconnected');
+      chadWsRef.current = chadWs;
+    } catch (err) {
+      console.log('[ClaudeTerminal] Could not connect to Chad:', err);
+    }
+  }, [projectPath]);
+
+  // Send output to Chad for transcription
+  const sendToChad = useCallback((data: string) => {
+    if (chadWsRef.current?.readyState === WebSocket.OPEN) {
+      chadWsRef.current.send(JSON.stringify({ type: 'output', data }));
+    }
+  }, []);
+
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setConnecting(true);
+    contextSentRef.current = false;
 
-    const DEV_DROPLET = '161.35.229.220';
+    // 1. Fetch context from Susan (parallel with terminal connect)
+    const contextPromise = fetchSusanContext();
+
+    // 2. Connect to Chad for transcription
+    connectToChad();
+
+    // 3. Connect to Claude terminal
     const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
 
     const ws = new WebSocket(fullUrl);
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
       setConnected(true);
       setConnecting(false);
 
@@ -200,6 +309,12 @@ export function ClaudeTerminal({
         xtermRef.current.writeln('');
         xtermRef.current.writeln('\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m');
         xtermRef.current.writeln('\x1b[90m   Starting Claude Code...\x1b[0m');
+
+        // Check if Susan has context
+        const context = await contextPromise;
+        if (context?.lastSession) {
+          xtermRef.current.writeln('\x1b[35m   📚 Loading memory from Susan...\x1b[0m');
+        }
         xtermRef.current.writeln('');
       }
 
@@ -229,54 +344,88 @@ export function ClaudeTerminal({
           // Write directly to xterm - it handles all escape codes natively!
           xtermRef.current.write(msg.data);
 
-          // Parse output for chat log - look for Claude responses and user prompts
+          // Forward to Chad for transcription
+          sendToChad(msg.data);
+
+          // Parse output for chat log - look for Claude responses
           const cleanData = msg.data.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
 
-          // Look for Claude response (● prefix)
-          const responseMatch = cleanData.match(/●\s*(.+?)(?:\r|\n|$)/);
-          if (responseMatch && responseMatch[1].trim()) {
-            const content = responseMatch[1].trim();
-
-            // Legacy ChatLogMessage format
-            if (onMessage) {
-              onMessage({
-                id: `claude-${Date.now()}`,
-                source: 'claude',
-                role: 'assistant',
-                content: content,
-                timestamp: new Date()
-              });
+          // Detect when Claude is ready (shows the > prompt) and send Susan's context
+          if (!contextSentRef.current && susanContext?.greeting) {
+            if (cleanData.includes('>') || cleanData.includes('What would you like')) {
+              contextSentRef.current = true;
+              setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  const contextMessage = buildContextPrompt(susanContext);
+                  ws.send(JSON.stringify({ type: 'input', data: contextMessage }));
+                  setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+                    }
+                  }, 50);
+                }
+              }, 500);
             }
+          }
 
-            // New ConversationMessage format for AI Team Chat
-            if (onConversationMessage) {
-              onConversationMessage({
-                id: `claude-${Date.now()}`,
-                user_id: 'claude',
-                user_name: 'Claude',
-                content: content,
-                created_at: new Date().toISOString(),
+          // Buffer response text for debounced parsing
+          // Look for Claude's bullet responses (● prefix indicates Claude speaking)
+          if (cleanData.includes('●')) {
+            // Extract all bullet points from this chunk
+            const bulletMatches = cleanData.match(/●\s*[^\n●]+/g);
+            if (bulletMatches) {
+              bulletMatches.forEach(match => {
+                const content = match.replace(/^●\s*/, '').trim();
+                if (content.length > 5) {
+                  responseBufferRef.current += content + '\n';
+                }
               });
             }
           }
 
-          // Look for user prompt (> prefix with content, but not empty)
-          // Only use this for legacy onMessage - AI Team Chat handles user messages separately
-          if (onMessage) {
-            const promptMatch = cleanData.match(/>\s*([^>\n]+?)(?:\r|\n|$)/);
-            if (promptMatch && promptMatch[1].trim() && !promptMatch[1].includes('Try "')) {
-              const content = promptMatch[1].trim();
-              if (content.length > 2 && !content.startsWith('Try')) {
-                onMessage({
-                  id: `user-${Date.now()}`,
-                  source: 'claude',
-                  role: 'user',
-                  content: content,
-                  timestamp: new Date()
-                });
+          // Debounce: Wait for output to settle before sending to chat
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+          }
+
+          debounceTimerRef.current = setTimeout(() => {
+            const bufferedContent = responseBufferRef.current.trim();
+
+            // Only send if we have meaningful content and it's different from last
+            if (bufferedContent.length > 10 && bufferedContent !== lastSentMessageRef.current) {
+              // Skip bash/tool output (usually contains lots of symbols or is very repetitive)
+              const isToolOutput = bufferedContent.includes('curl') ||
+                                   bufferedContent.includes('├') ||
+                                   bufferedContent.includes('└') ||
+                                   (bufferedContent.match(/\|/g) || []).length > 5;
+
+              if (!isToolOutput) {
+                lastSentMessageRef.current = bufferedContent;
+
+                if (onMessage) {
+                  onMessage({
+                    id: `claude-${Date.now()}`,
+                    source: 'claude',
+                    role: 'assistant',
+                    content: bufferedContent,
+                    timestamp: new Date()
+                  });
+                }
+
+                if (onConversationMessage) {
+                  onConversationMessage({
+                    id: `claude-${Date.now()}`,
+                    user_id: 'claude',
+                    user_name: 'Claude',
+                    content: bufferedContent,
+                    created_at: new Date().toISOString(),
+                  });
+                }
               }
+
+              responseBufferRef.current = '';
             }
-          }
+          }, 1500); // Wait 1.5s after last output before sending to chat
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
@@ -311,30 +460,67 @@ export function ClaudeTerminal({
   const disconnect = useCallback(() => {
     wsRef.current?.close();
     wsRef.current = null;
+    chadWsRef.current?.close();
+    chadWsRef.current = null;
     setConnected(false);
+    setMemoryStatus('idle');
+    setSusanContext(null);
   }, []);
 
   const sendInput = useCallback(() => {
-    console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input:', inputValue);
+    console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input length:', inputValue.length);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('[ClaudeTerminal] Sending:', inputValue);
       if (inputValue.trim()) {
-        // Send text first
-        wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue }));
-        // Then send Enter after a short delay to let TUI process
-        setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+        // For long input, chunk it to avoid overwhelming the terminal
+        const CHUNK_SIZE = 1000;
+        const text = inputValue;
+
+        if (text.length > CHUNK_SIZE) {
+          // Send in chunks with delays
+          const chunks = [];
+          for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+            chunks.push(text.slice(i, i + CHUNK_SIZE));
           }
-        }, 50);
+
+          let chunkIndex = 0;
+          const sendNextChunk = () => {
+            if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
+              chunkIndex++;
+              if (chunkIndex < chunks.length) {
+                setTimeout(sendNextChunk, 50);
+              } else {
+                // All chunks sent, now send Enter
+                setTimeout(() => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                  }
+                }, 100);
+              }
+            }
+          };
+          sendNextChunk();
+        } else {
+          // Short input - send normally
+          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+          setTimeout(() => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+            }
+          }, 50);
+        }
 
         // Log to conversation (for AI Team Chat to display)
+        // Truncate very long pastes in the chat log
         if (onConversationMessage) {
+          const displayContent = inputValue.length > 500
+            ? inputValue.slice(0, 500) + `... (${inputValue.length} chars)`
+            : inputValue.trim();
           onConversationMessage({
             id: `user-${Date.now()}`,
             user_id: 'me',
             user_name: 'You',
-            content: inputValue.trim(),
+            content: displayContent,
             created_at: new Date().toISOString(),
           });
         }
@@ -363,6 +549,16 @@ export function ClaudeTerminal({
           }`}>
             {connected ? 'Connected' : connecting ? 'Connecting...' : 'Disconnected'}
           </span>
+          {connected && (
+            <span className={`flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${
+              memoryStatus === 'loaded' ? 'bg-purple-600/20 text-purple-400' :
+              memoryStatus === 'loading' ? 'bg-yellow-600/20 text-yellow-400' :
+              'bg-gray-700 text-gray-500'
+            }`}>
+              <Brain className="w-3 h-3" />
+              {memoryStatus === 'loaded' ? 'Memory' : memoryStatus === 'loading' ? 'Loading...' : 'No Memory'}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -421,8 +617,8 @@ export function ClaudeTerminal({
             }}
             disabled={!connected}
             placeholder={connected ? 'Type command and press Enter (Shift+Enter for new line)...' : 'Click Connect first'}
-            rows={3}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50 resize-none"
+            rows={6}
+            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50 resize-y min-h-[120px]"
           />
           <button
             onClick={sendInput}
@@ -432,6 +628,7 @@ export function ClaudeTerminal({
             Send
           </button>
         </div>
+        <p className="text-gray-500 text-xs mt-1 ml-6">Enter to send, Shift+Enter for new line, Escape for TUI navigation</p>
       </div>
     </div>
   );

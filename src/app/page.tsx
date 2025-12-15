@@ -146,18 +146,42 @@ export default function DevEnvironmentPage() {
     };
     setChadConversation(prev => [...prev, userMsg]);
 
-    // TODO: Implement actual Chad API call (GPT-4o-mini)
-    // For now, just echo back
-    const response = `Got it! "${message}" - I'll handle this.`;
-    const assistantMsg: ConversationMessage = {
-      id: `chad-assistant-${Date.now()}`,
-      user_id: 'chad',
-      user_name: 'Chad',
-      content: response,
-      created_at: new Date().toISOString(),
-    };
-    setChadConversation(prev => [...prev, assistantMsg]);
-    return response;
+    try {
+      // Call Chad API (port 5401)
+      const response = await fetch('http://localhost:5401/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          context: selectedProject?.server_path,
+        }),
+      });
+
+      const data = await response.json();
+      const reply = data.reply || 'Sorry, I had trouble processing that.';
+
+      const assistantMsg: ConversationMessage = {
+        id: `chad-assistant-${Date.now()}`,
+        user_id: 'chad',
+        user_name: 'Chad',
+        content: reply,
+        created_at: new Date().toISOString(),
+      };
+      setChadConversation(prev => [...prev, assistantMsg]);
+      return reply;
+    } catch (error) {
+      console.error('Chad API error:', error);
+      const errorMsg = 'Sorry, I\'m having connection issues. Try again?';
+      const assistantMsg: ConversationMessage = {
+        id: `chad-assistant-${Date.now()}`,
+        user_id: 'chad',
+        user_name: 'Chad',
+        content: errorMsg,
+        created_at: new Date().toISOString(),
+      };
+      setChadConversation(prev => [...prev, assistantMsg]);
+      return errorMsg;
+    }
   };
 
   // Handler for sending to Susan API
@@ -172,18 +196,42 @@ export default function DevEnvironmentPage() {
     };
     setSusanConversation(prev => [...prev, userMsg]);
 
-    // TODO: Implement actual Susan API call (Librarian)
-    // For now, just acknowledge
-    const response = `Thank you for letting me know! I've noted: "${message}"`;
-    const assistantMsg: ConversationMessage = {
-      id: `susan-assistant-${Date.now()}`,
-      user_id: 'susan',
-      user_name: 'Susan',
-      content: response,
-      created_at: new Date().toISOString(),
-    };
-    setSusanConversation(prev => [...prev, assistantMsg]);
-    return response;
+    try {
+      // Call Susan API (port 5403)
+      const response = await fetch('http://localhost:5403/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          projectPath: selectedProject?.server_path,
+        }),
+      });
+
+      const data = await response.json();
+      const reply = data.reply || 'Sorry, I had trouble processing that.';
+
+      const assistantMsg: ConversationMessage = {
+        id: `susan-assistant-${Date.now()}`,
+        user_id: 'susan',
+        user_name: 'Susan',
+        content: reply,
+        created_at: new Date().toISOString(),
+      };
+      setSusanConversation(prev => [...prev, assistantMsg]);
+      return reply;
+    } catch (error) {
+      console.error('Susan API error:', error);
+      const errorMsg = 'Sorry, I\'m having connection issues. Try again?';
+      const assistantMsg: ConversationMessage = {
+        id: `susan-assistant-${Date.now()}`,
+        user_id: 'susan',
+        user_name: 'Susan',
+        content: errorMsg,
+        created_at: new Date().toISOString(),
+      };
+      setSusanConversation(prev => [...prev, assistantMsg]);
+      return errorMsg;
+    }
   };
 
   // Fetch projects on mount
