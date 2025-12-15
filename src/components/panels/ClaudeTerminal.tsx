@@ -467,8 +467,11 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('❯')) continue;
             // - User input echo (lines starting with > followed by text)
             if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
+            if (trimmedLine.startsWith('>') && !trimmedLine.startsWith('> ===')) continue; // Also catch >text without space
             // - Short user input echo (just > followed by 1-3 chars, like "> k" or "> y")
             if (/^>\s*[a-zA-Z0-9]{1,3}$/.test(trimmedLine)) continue;
+            // - Longer user input echo (user messages getting echoed back)
+            if (/^>\s*\w+/.test(trimmedLine) && !trimmedLine.includes('===')) continue;
             // - TUI instruction/tip lines
             if (trimmedLine.includes('Enter to select')) continue;
             if (trimmedLine.includes('Tab/Arrow keys')) continue;
@@ -488,6 +491,8 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('/passes')) continue;
             if (trimmedLine.includes('CC ✻')) continue; // Claude Code branding icon
             if (trimmedLine.includes('┊ (')) continue; // Status bar separator
+            // - TUI turn indicator spam
+            if (trimmedLine === 'that turn' || trimmedLine.includes('that turn')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
