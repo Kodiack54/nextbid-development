@@ -432,20 +432,29 @@ export function ClaudeTerminal({
             }
           }
 
-          // Buffer ALL response text - minimal filtering
+          // Buffer ALL response text - filter TUI noise
           // Chad gets raw data via sendToChad() for full logging
           const lines = cleanData.split(/[\r\n]+/);
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Only skip these (true noise):
+            // Skip TUI noise (spinners, status, prompts):
             // - Empty lines at very start
             if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
             // - Shell prompts
             if (trimmedLine === '$' || trimmedLine === '%' || trimmedLine === '>') continue;
             if (trimmedLine.startsWith('❯')) continue;
-            // - Spinner/progress indicators only
-            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+$/.test(trimmedLine)) continue;
+            // - Spinner characters (all the fancy ones Claude Code uses)
+            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
+            // - Status lines (Ideating, Thinking, shortcuts hints)
+            if (/^[·✢✶✻✽*•∴]?\s*(Ideating|Thinking|Thought)/.test(trimmedLine)) continue;
+            if (trimmedLine.includes('(esc to interrupt)')) continue;
+            if (trimmedLine.includes('for shortcuts')) continue;
+            if (trimmedLine.includes('ctrl+o to show')) continue;
+            if (trimmedLine.includes('ctrl-g to edit')) continue;
+            // - Claude Code UI chrome
+            if (trimmedLine.startsWith('Try "')) continue;
+            if (trimmedLine === '?' || trimmedLine === '? ') continue;
 
             // Everything else goes through - INCLUDING box drawing!
             if (trimmedLine.length === 0) {
