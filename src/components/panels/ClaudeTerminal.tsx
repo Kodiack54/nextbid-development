@@ -537,27 +537,38 @@ export function ClaudeTerminal({
           // Debounce: send buffered content after output settles
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
           debounceTimerRef.current = setTimeout(() => {
-            const content = responseBufferRef.current.trim();
+            let content = responseBufferRef.current.trim();
             if (content.length > 10) {
-              // Check if this is Susan's briefing - only send once per session
-              const isBriefing = content.includes('LAST SESSION:') ||
+              // Check if this is Susan's briefing
+              const isBriefing = content.includes('LAST SESSION') ||
                                  content.includes('END BRIEFING') ||
-                                 content.includes("I've gathered everything");
-              if (isBriefing && briefingSentRef.current) {
-                responseBufferRef.current = '';
-                return; // Skip duplicate briefings
-              }
+                                 content.includes("I've gathered");
+
               if (isBriefing) {
+                // Already sent briefing this session? Skip entirely
+                if (briefingSentRef.current) {
+                  responseBufferRef.current = '';
+                  return;
+                }
                 briefingSentRef.current = true;
+
+                // Extract just ONE copy of the briefing (TUI redraws cause duplicates in buffer)
+                const endMarker = '=== END BRIEFING ===';
+                const firstEnd = content.indexOf(endMarker);
+                if (firstEnd !== -1) {
+                  // Find the start of this briefing
+                  const startMarker = "Hey Claude, I've gathered";
+                  let startIdx = content.lastIndexOf(startMarker, firstEnd);
+                  if (startIdx === -1) startIdx = 0;
+                  content = content.slice(startIdx, firstEnd + endMarker.length).trim();
+                }
               }
 
               // Robust deduplication - check against recent messages
               const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
               const isDuplicate = recentMessagesRef.current.some(recent => {
                 const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
-                // Exact match
                 if (normalizedContent === normalizedRecent) return true;
-                // Substring overlap (first 50 chars to be more strict)
                 const sig1 = normalizedContent.slice(0, 50);
                 const sig2 = normalizedRecent.slice(0, 50);
                 if (sig1 === sig2) return true;
@@ -569,7 +580,6 @@ export function ClaudeTerminal({
               const tooSoon = now - lastMessageTimeRef.current < 1500;
 
               if (!isDuplicate && !tooSoon) {
-                // Keep last 10 messages for dedup
                 recentMessagesRef.current.push(content);
                 if (recentMessagesRef.current.length > 10) {
                   recentMessagesRef.current.shift();
