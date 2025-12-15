@@ -147,8 +147,8 @@ export default function DevEnvironmentPage() {
     setChadConversation(prev => [...prev, userMsg]);
 
     try {
-      // Call Chad API (port 5401)
-      const response = await fetch('http://localhost:5401/api/chat', {
+      // Call Chad API through proxy
+      const response = await fetch('/api/chad/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,8 +197,8 @@ export default function DevEnvironmentPage() {
     setSusanConversation(prev => [...prev, userMsg]);
 
     try {
-      // Call Susan API (port 5403)
-      const response = await fetch('http://localhost:5403/api/chat', {
+      // Call Susan API through proxy
+      const response = await fetch('/api/susan/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
