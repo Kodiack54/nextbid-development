@@ -77,7 +77,7 @@ export interface Session {
 export type PanelType = 'files' | 'terminal' | 'ai-usage' | 'browser' | 'schema' | 'chatlog' | 'hub' | 'storage' | 'projects' | 'docs' | null;
 
 export const ENVIRONMENTS: Environment[] = [
-  { id: 'dev', name: 'Development', portKey: 'port_dev' },
+  { id: 'dev', name: 'Dev Studio', portKey: 'port_dev' },
   { id: 'test', name: 'Test', portKey: 'port_test' },
   { id: 'prod', name: 'Production', portKey: 'port_prod', readOnly: true },
 ];

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bot, Send, X, GripHorizontal, Minimize2, Maximize2, Terminal, Zap } from 'lucide-react';
+import { Bot, Send, X, GripHorizontal, Minimize2, Maximize2, Terminal, Zap, StickyNote, Copy, Check, Plus, Trash2 } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -12,6 +12,12 @@ interface ChatMessage {
 }
 
 type AITeamMember = 'claude' | 'chad' | 'susan';
+
+interface NotepadTab {
+  id: string;
+  name: string;
+  content: string;
+}
 
 interface AITeamChatProps {
   // Claude terminal integration
@@ -35,6 +41,7 @@ const MIN_WIDTH = 600;
 const MIN_HEIGHT = 500;
 const DEFAULT_WIDTH = 900;
 const DEFAULT_HEIGHT = 650;
+const NOTEPAD_WIDTH = 1100; // Extra wide for notepad mode
 
 export default function AITeamChat({
   onSendToClaudeTerminal,
@@ -52,6 +59,18 @@ export default function AITeamChat({
   const [activeMember, setActiveMember] = useState<AITeamMember>('claude');
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
+  // Notepad state
+  const [showNotepad, setShowNotepad] = useState(false);
+  const [activeNotepadTab, setActiveNotepadTab] = useState(0);
+  const [notepadTabs, setNotepadTabs] = useState<NotepadTab[]>([
+    { id: '1', name: 'Quick Commands', content: '' },
+    { id: '2', name: 'Notes', content: '' },
+    { id: '3', name: 'Snippets', content: '' },
+    { id: '4', name: 'Scratch', content: '' },
+  ]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
 
   // Dragging state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -78,6 +97,62 @@ export default function AITeamChat({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // Load notepad from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('ai-team-notepad');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setNotepadTabs(parsed);
+        }
+      } catch (e) {
+        console.error('Failed to load notepad:', e);
+      }
+    }
+  }, []);
+
+  // Save notepad to localStorage
+  useEffect(() => {
+    localStorage.setItem('ai-team-notepad', JSON.stringify(notepadTabs));
+  }, [notepadTabs]);
+
+  // Auto-expand width when notepad is shown
+  useEffect(() => {
+    if (showNotepad && !isMaximized) {
+      setSize(prev => ({
+        ...prev,
+        width: Math.max(prev.width, NOTEPAD_WIDTH)
+      }));
+    }
+  }, [showNotepad, isMaximized]);
+
+  // Notepad functions
+  const updateNotepadContent = (content: string) => {
+    setNotepadTabs(tabs =>
+      tabs.map((tab, i) =>
+        i === activeNotepadTab ? { ...tab, content } : tab
+      )
+    );
+  };
+
+  const updateTabName = (id: string, name: string) => {
+    setNotepadTabs(tabs =>
+      tabs.map(tab => tab.id === id ? { ...tab, name } : tab)
+    );
+    setEditingTabId(null);
+  };
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -340,6 +415,24 @@ export default function AITeamChat({
                     <span className="block truncate text-xs opacity-60">Librarian</span>
                   </div>
                 </button>
+
+                {/* Notepad Toggle */}
+                <div className="border-t border-gray-700 mt-2 pt-2">
+                  <button
+                    onClick={() => setShowNotepad(!showNotepad)}
+                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors ${
+                      showNotepad
+                        ? 'bg-yellow-600 text-white'
+                        : 'text-gray-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    <StickyNote className="w-5 h-5" />
+                    <div className="flex-1 min-w-0">
+                      <span className="block truncate font-medium">Notepad</span>
+                      <span className="block truncate text-xs opacity-60">Quick snippets</span>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               {/* Info footer */}
@@ -358,10 +451,32 @@ export default function AITeamChat({
               </div>
             </div>
 
-            {/* Right - Messages Area */}
+            {/* Right - Messages Area or Notepad */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Member Header */}
-              <div className="px-4 py-2 border-b border-gray-700 flex items-center gap-3 flex-shrink-0">
+              {/* Header - Different for Notepad vs Chat */}
+              {showNotepad ? (
+                <div className="px-4 py-2 border-b border-gray-700 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <StickyNote className="w-5 h-5 text-yellow-400" />
+                    <div>
+                      <p className="text-white font-medium">Quick Notepad</p>
+                      <p className="text-gray-500 text-xs">Copy/paste snippets - saved locally</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(notepadTabs[activeNotepadTab].content, notepadTabs[activeNotepadTab].id)}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    title="Copy all content"
+                  >
+                    {copiedId === notepadTabs[activeNotepadTab].id ? (
+                      <><Check className="w-3 h-3 text-green-400" /> Copied</>
+                    ) : (
+                      <><Copy className="w-3 h-3" /> Copy All</>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="px-4 py-2 border-b border-gray-700 flex items-center gap-3 flex-shrink-0">
                 {activeMember === 'claude' && (
                   <>
                     <span className="text-2xl">👨‍💻</span>
@@ -390,133 +505,206 @@ export default function AITeamChat({
                   </>
                 )}
               </div>
+              )}
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {messages.length === 0 && (
-                  <div className="text-center text-gray-500 py-8">
-                    <div className="text-3xl mb-2">
-                      {activeMember === 'claude' ? '👨‍💻' : activeMember === 'chad' ? '🧑‍💻' : '👩‍💼'}
-                    </div>
-                    <p className="text-sm">
-                      {activeMember === 'claude'
-                        ? claudeConnected
-                          ? 'Claude is ready. Send a message!'
-                          : 'Connect to Claude terminal first'
-                        : activeMember === 'chad'
-                          ? 'Chad is ready for quick tasks!'
-                          : 'Susan is ready to help organize knowledge!'
-                      }
-                    </p>
+              {/* Content Area - Messages or Notepad */}
+              {showNotepad ? (
+                <>
+                  {/* Notepad Tabs */}
+                  <div className="flex border-b border-gray-700 overflow-x-auto flex-shrink-0">
+                    {notepadTabs.map((tab, index) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveNotepadTab(index)}
+                        onDoubleClick={() => setEditingTabId(tab.id)}
+                        className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 transition-colors ${
+                          activeNotepadTab === index
+                            ? 'border-yellow-500 text-yellow-400 bg-gray-800/50'
+                            : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/30'
+                        }`}
+                      >
+                        {editingTabId === tab.id ? (
+                          <input
+                            type="text"
+                            defaultValue={tab.name}
+                            autoFocus
+                            className="bg-gray-700 text-white px-1 py-0.5 text-sm rounded w-24 outline-none"
+                            onBlur={(e) => updateTabName(tab.id, e.target.value || 'Untitled')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateTabName(tab.id, e.currentTarget.value || 'Untitled');
+                              }
+                              if (e.key === 'Escape') {
+                                setEditingTabId(null);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          tab.name
+                        )}
+                      </button>
+                    ))}
                   </div>
-                )}
 
-                {messages.map(msg => {
-                  const isUser = msg.user_id === 'me' || msg.user_id === userId;
-                  return (
-                    <div key={msg.id} className="flex gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
-                        isUser
-                          ? 'bg-gray-600'
-                          : activeMember === 'claude'
-                            ? 'bg-orange-900/50'
-                            : activeMember === 'chad'
-                              ? 'bg-blue-900/50'
-                              : 'bg-purple-900/50'
-                      }`}>
-                        {isUser
-                          ? '👤'
-                          : activeMember === 'claude'
-                            ? '👨‍💻'
-                            : activeMember === 'chad'
-                              ? '🧑‍💻'
-                              : '👩‍💼'
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-white text-sm font-medium">{msg.user_name}</span>
-                          <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
+                  {/* Notepad Content */}
+                  <div className="flex-1 p-3 overflow-hidden">
+                    <textarea
+                      value={notepadTabs[activeNotepadTab].content}
+                      onChange={(e) => updateNotepadContent(e.target.value)}
+                      placeholder="Paste commands, snippets, or notes here...
+
+Double-click a tab to rename it.
+Click 'Copy All' to copy contents to clipboard.
+
+Example:
+pm2 logs dev-studio-5000 --lines 5
+git pull && npm run build && pm2 restart dev-studio-5000"
+                      className="w-full h-full bg-gray-900 text-gray-100 rounded-lg p-3 text-sm font-mono resize-none outline-none border border-gray-700 focus:border-yellow-500"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  {/* Notepad Footer */}
+                  <div className="px-3 pb-3 text-xs text-gray-500 flex items-center justify-between">
+                    <span>
+                      {notepadTabs[activeNotepadTab].content.length} characters
+                      {notepadTabs[activeNotepadTab].content.split('\n').length > 1 &&
+                        ` • ${notepadTabs[activeNotepadTab].content.split('\n').length} lines`}
+                    </span>
+                    <span>Auto-saved locally</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {messages.length === 0 && (
+                      <div className="text-center text-gray-500 py-8">
+                        <div className="text-3xl mb-2">
+                          {activeMember === 'claude' ? '👨‍💻' : activeMember === 'chad' ? '🧑‍💻' : '👩‍💼'}
                         </div>
-                        <p className="text-gray-300 text-sm mt-0.5 break-words">
-                          {msg.content}
+                        <p className="text-sm">
+                          {activeMember === 'claude'
+                            ? claudeConnected
+                              ? 'Claude is ready. Send a message!'
+                              : 'Connect to Claude terminal first'
+                            : activeMember === 'chad'
+                              ? 'Chad is ready for quick tasks!'
+                              : 'Susan is ready to help organize knowledge!'
+                          }
                         </p>
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
 
-                {isTyping && (
-                  <div className="flex gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${
-                      activeMember === 'chad' ? 'bg-blue-900/50' : 'bg-purple-900/50'
-                    }`}>
-                      {activeMember === 'chad' ? '🧑‍💻' : '👩‍💼'}
-                    </div>
-                    <div className={`px-3 py-2 rounded-lg ${
-                      activeMember === 'chad' ? 'bg-blue-900/30' : 'bg-purple-900/30'
-                    }`}>
-                      <div className="flex gap-1">
-                        <span className={`w-2 h-2 rounded-full animate-bounce ${
-                          activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
-                        }`} style={{ animationDelay: '0ms' }} />
-                        <span className={`w-2 h-2 rounded-full animate-bounce ${
-                          activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
-                        }`} style={{ animationDelay: '150ms' }} />
-                        <span className={`w-2 h-2 rounded-full animate-bounce ${
-                          activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
-                        }`} style={{ animationDelay: '300ms' }} />
+                    {messages.map(msg => {
+                      const isUser = msg.user_id === 'me' || msg.user_id === userId;
+                      return (
+                        <div key={msg.id} className="flex gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
+                            isUser
+                              ? 'bg-gray-600'
+                              : activeMember === 'claude'
+                                ? 'bg-orange-900/50'
+                                : activeMember === 'chad'
+                                  ? 'bg-blue-900/50'
+                                  : 'bg-purple-900/50'
+                          }`}>
+                            {isUser
+                              ? '👤'
+                              : activeMember === 'claude'
+                                ? '👨‍💻'
+                                : activeMember === 'chad'
+                                  ? '🧑‍💻'
+                                  : '👩‍💼'
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white text-sm font-medium">{msg.user_name}</span>
+                              <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
+                            </div>
+                            <p className="text-gray-300 text-sm mt-0.5 break-words">
+                              {msg.content}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {isTyping && (
+                      <div className="flex gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${
+                          activeMember === 'chad' ? 'bg-blue-900/50' : 'bg-purple-900/50'
+                        }`}>
+                          {activeMember === 'chad' ? '🧑‍💻' : '👩‍💼'}
+                        </div>
+                        <div className={`px-3 py-2 rounded-lg ${
+                          activeMember === 'chad' ? 'bg-blue-900/30' : 'bg-purple-900/30'
+                        }`}>
+                          <div className="flex gap-1">
+                            <span className={`w-2 h-2 rounded-full animate-bounce ${
+                              activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
+                            }`} style={{ animationDelay: '0ms' }} />
+                            <span className={`w-2 h-2 rounded-full animate-bounce ${
+                              activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
+                            }`} style={{ animationDelay: '150ms' }} />
+                            <span className={`w-2 h-2 rounded-full animate-bounce ${
+                              activeMember === 'chad' ? 'bg-blue-400' : 'bg-purple-400'
+                            }`} style={{ animationDelay: '300ms' }} />
+                          </div>
+                        </div>
                       </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="p-3 border-t border-gray-700 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder={
+                          activeMember === 'claude'
+                            ? claudeConnected ? 'Message Claude...' : 'Connect terminal first'
+                            : activeMember === 'chad'
+                              ? 'Message Chad...'
+                              : 'Message Susan...'
+                        }
+                        disabled={activeMember === 'claude' && !claudeConnected}
+                        className={`flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50 focus:ring-2 ${
+                          activeMember === 'claude'
+                            ? 'focus:ring-orange-500'
+                            : activeMember === 'chad'
+                              ? 'focus:ring-blue-500'
+                              : 'focus:ring-purple-500'
+                        }`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            sendMessage();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={sendMessage}
+                        disabled={!newMessage.trim() || (activeMember === 'claude' && !claudeConnected)}
+                        className={`p-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          activeMember === 'claude'
+                            ? 'bg-orange-600 hover:bg-orange-700'
+                            : activeMember === 'chad'
+                              ? 'bg-blue-600 hover:bg-blue-700'
+                              : 'bg-purple-600 hover:bg-purple-700'
+                        }`}
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Message Input */}
-              <div className="p-3 border-t border-gray-700 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder={
-                      activeMember === 'claude'
-                        ? claudeConnected ? 'Message Claude...' : 'Connect terminal first'
-                        : activeMember === 'chad'
-                          ? 'Message Chad...'
-                          : 'Message Susan...'
-                    }
-                    disabled={activeMember === 'claude' && !claudeConnected}
-                    className={`flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50 focus:ring-2 ${
-                      activeMember === 'claude'
-                        ? 'focus:ring-orange-500'
-                        : activeMember === 'chad'
-                          ? 'focus:ring-blue-500'
-                          : 'focus:ring-purple-500'
-                    }`}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        sendMessage();
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim() || (activeMember === 'claude' && !claudeConnected)}
-                    className={`p-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                      activeMember === 'claude'
-                        ? 'bg-orange-600 hover:bg-orange-700'
-                        : activeMember === 'chad'
-                          ? 'bg-blue-600 hover:bg-blue-700'
-                          : 'bg-purple-600 hover:bg-purple-700'
-                    }`}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
 
