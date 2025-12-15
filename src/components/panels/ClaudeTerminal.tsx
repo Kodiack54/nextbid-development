@@ -477,7 +477,7 @@ export function ClaudeTerminal({
 
         if (text.length > CHUNK_SIZE) {
           // Send in chunks with delays
-          const chunks = [];
+          const chunks: string[] = [];
           for (let i = 0; i < text.length; i += CHUNK_SIZE) {
             chunks.push(text.slice(i, i + CHUNK_SIZE));
           }
