@@ -458,8 +458,9 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('Tip: Run /')) continue;
             if (trimmedLine.includes('/install-github-app')) continue;
             if (trimmedLine.includes('/resume later')) continue;
-            if (trimmedLine === 'terminal?' || trimmedLine.endsWith('terminal?')) continue;
+            if (trimmedLine.includes('terminal?')) continue; // Filter ANY line with terminal?
             if (trimmedLine.includes('asted text #')) continue; // "Pasted text #1" indicator
+            if (trimmedLine.includes('+1 lines]')) continue; // Paste line count indicator
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -471,6 +472,28 @@ export function ClaudeTerminal({
             // - Claude Code UI chrome
             if (trimmedLine.startsWith('Try "')) continue;
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
+            // - Welcome banner parts (filter repeated banner spam)
+            if (trimmedLine.includes('Claude Code v')) continue;
+            if (trimmedLine.includes('Welcome back')) continue;
+            if (trimmedLine.includes('Tips for')) continue;
+            if (trimmedLine.includes('getting started')) continue;
+            if (trimmedLine.includes('Run /init')) continue;
+            if (trimmedLine.includes('Recent activity')) continue;
+            if (trimmedLine.includes('No recent ac')) continue;
+            if (trimmedLine.includes('Opus 4.5')) continue;
+            if (trimmedLine.includes('Claude Max')) continue;
+            if (trimmedLine.includes("'s Organization")) continue;
+            // - Welcome banner box lines (decorative only)
+            if (/^[╭╮╯╰│─]+$/.test(trimmedLine)) continue;
+            if (trimmedLine.startsWith('╭───') || trimmedLine.startsWith('╰')) continue;
+            if (trimmedLine === '│' || trimmedLine.startsWith('│ ') && trimmedLine.endsWith(' │')) continue;
+            // - Decorative stars/blocks from banner
+            if (/^[*\s▐▛▜▝▘█]+$/.test(trimmedLine)) continue;
+            // - Path lines from banner (just the project path)
+            if (trimmedLine === '/var/www/NextBid_Dev/dev-studio-5000') continue;
+            if (trimmedLine.match(/^\/var\/www\/[^\s]+$/)) continue; // Any bare path
+            // - Empty bullet markers
+            if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
 
             // Everything else goes through - INCLUDING box drawing!
             // Preserve original indentation (use line, not trimmedLine)
@@ -497,20 +520,46 @@ export function ClaudeTerminal({
 
             // Only send if we have meaningful content
             if (bufferedContent.length > 10) {
-              // Create signature from first 50 chars (for dedup)
-              const signature = bufferedContent.slice(0, 50);
+              // Create multiple signatures for robust dedup:
+              // 1. First 100 chars (catches similar starts)
+              // 2. Normalized content hash (catches identical content with whitespace differences)
+              const normalizedContent = bufferedContent.replace(/\s+/g, ' ').trim();
+              const shortSig = normalizedContent.slice(0, 100);
+              const fullSig = normalizedContent.slice(0, 500); // Longer signature for better matching
 
-              // Skip if we've seen this signature recently
-              if (recentMessagesRef.current.has(signature)) {
+              // Skip if we've seen similar content recently
+              if (recentMessagesRef.current.has(shortSig) || recentMessagesRef.current.has(fullSig)) {
                 responseBufferRef.current = '';
                 return;
               }
 
-              // Add to recent set and auto-expire after 10 seconds
-              recentMessagesRef.current.add(signature);
+              // Skip Susan briefing duplicates (check for briefing markers)
+              if (bufferedContent.includes('SUSAN') && bufferedContent.includes('BRIEFING')) {
+                if (recentMessagesRef.current.has('susan-briefing')) {
+                  responseBufferRef.current = '';
+                  return;
+                }
+                recentMessagesRef.current.add('susan-briefing');
+                setTimeout(() => {
+                  recentMessagesRef.current.delete('susan-briefing');
+                }, 60000); // Susan briefing dedup lasts 1 minute
+              }
+
+              // Skip echoed user instructions (long prompts that get echoed back)
+              if (bufferedContent.includes('Run these tests in order') ||
+                  bufferedContent.includes('Wait for my y/n') ||
+                  bufferedContent.includes('Start with Test 1')) {
+                responseBufferRef.current = '';
+                return;
+              }
+
+              // Add signatures to recent set and auto-expire
+              recentMessagesRef.current.add(shortSig);
+              recentMessagesRef.current.add(fullSig);
               setTimeout(() => {
-                recentMessagesRef.current.delete(signature);
-              }, 10000);
+                recentMessagesRef.current.delete(shortSig);
+                recentMessagesRef.current.delete(fullSig);
+              }, 30000); // Increased to 30 seconds
 
               // Skip only actual command execution output (not grids Claude intentionally shows)
               const isToolOutput = bufferedContent.includes('curl ') ||
