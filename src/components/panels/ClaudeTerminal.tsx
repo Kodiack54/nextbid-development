@@ -560,9 +560,11 @@ export function ClaudeTerminal({
             // They appear before actual content or on their own
             bufferedContent = bufferedContent.replace(/^[•●]\s*\n/gm, ''); // Standalone bullet + newline
             bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');  // Standalone bullet at end
-            bufferedContent = bufferedContent.replace(/^[•●]\s+/gm, '');   // Bullet at start of line with content
+            bufferedContent = bufferedContent.replace(/^[•●]\s*/gm, '');   // Bullet at start of line (with or without space)
             // 2. Join numbered items split across lines (1.\n  Second → 1. Second)
-            bufferedContent = bufferedContent.replace(/^(\s*)(\d+\.)\s*\n\s*/gm, '$1$2 ');
+            // Handle various formats: "1.\n", "1. \n", "1.\nSecond", etc.
+            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n\s*(\S)/gm, '$1 $2');
+            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n/gm, '$1 ');
             // 3. Normalize bullet spacing
             bufferedContent = bufferedContent.replace(/^(\s*)-\s+/gm, '$1- ');
             // 4. Remove • prefix if followed by - (redundant marker)
