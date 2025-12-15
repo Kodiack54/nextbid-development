@@ -421,6 +421,54 @@ export function ClaudeTerminal({
         }
       }, 2000);
 
+      // Fallback: If Susan briefing hasn't been sent after 12 seconds, send it anyway
+      setTimeout(() => {
+        const ctx = susanContextRef.current;
+        if (!contextSentRef.current && ctx?.greeting && ws.readyState === WebSocket.OPEN) {
+          console.log('[ClaudeTerminal] Fallback timer: sending Susan briefing');
+          contextSentRef.current = true;
+          briefingSentToClaudeRef.current = true;
+
+          if (xtermRef.current) {
+            xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
+          }
+
+          const contextMessage = buildContextPrompt(ctx);
+          // Send in chunks
+          const CHUNK_SIZE = 1000;
+          if (contextMessage.length > CHUNK_SIZE) {
+            const chunks: string[] = [];
+            for (let i = 0; i < contextMessage.length; i += CHUNK_SIZE) {
+              chunks.push(contextMessage.slice(i, i + CHUNK_SIZE));
+            }
+            let chunkIndex = 0;
+            const sendNextChunk = () => {
+              if (chunkIndex < chunks.length && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
+                chunkIndex++;
+                if (chunkIndex < chunks.length) {
+                  setTimeout(sendNextChunk, 50);
+                } else {
+                  setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+                    }
+                  }, 100);
+                }
+              }
+            };
+            sendNextChunk();
+          } else {
+            ws.send(JSON.stringify({ type: 'input', data: contextMessage }));
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+              }
+            }, 100);
+          }
+        }
+      }, 12000); // 12 second fallback
+
       inputRef.current?.focus();
     };
 
@@ -447,17 +495,25 @@ export function ClaudeTerminal({
             .trim();
 
           // Detect when Claude is ready and send Susan's memory briefing
-          // Look for Claude's actual input prompt - the ❯ symbol at end, or asking what to work on
           const currentContext = susanContextRef.current;
           if (!contextSentRef.current && currentContext?.greeting) {
-            // Only trigger on Claude's ACTUAL ready prompt, not welcome screen
-            // Claude shows "❯" or asks "What would you like to work on?" when ready
+            // Debug: log what we're seeing to help diagnose
+            if (cleanData.length > 10) {
+              console.log('[ClaudeTerminal] Checking for ready prompt in:', cleanData.slice(-100));
+            }
+
+            // Look for Claude's ready indicators - be very flexible
             const isClaudeReady = cleanData.includes('What would you like') ||
                                   cleanData.includes('How can I help') ||
                                   cleanData.includes('What can I help') ||
-                                  // The actual input prompt (❯ at end of output)
-                                  cleanData.endsWith('❯') ||
-                                  cleanData.includes('❯\n');
+                                  cleanData.includes('help you with') ||
+                                  cleanData.includes('work on today') ||
+                                  cleanData.includes('assist you') ||
+                                  // Various prompt characters at end
+                                  /[❯>›»]\s*$/.test(cleanData) ||
+                                  cleanData.includes('❯') ||
+                                  // After Claude Code loads and shows its UI
+                                  (cleanData.includes('Opus') && cleanData.includes('Claude'));
 
             if (isClaudeReady) {
               contextSentRef.current = true;
