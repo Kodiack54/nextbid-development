@@ -387,7 +387,17 @@ export function ClaudeTerminal({
           sendToChad(msg.data);
 
           // Parse output for chat log - look for Claude responses
-          const cleanData = msg.data.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
+          // Comprehensive ANSI cleaning
+          const cleanData = msg.data
+            .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')  // ESC [ ... letter (cursor, colors, etc)
+            .replace(/\[([0-9;]*[A-Za-z])/g, '')    // Visible codes without ESC prefix
+            .replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '') // Cursor visibility/mode sequences
+            .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences (title bar, etc)
+            .replace(/\x1b/g, '')                    // Any remaining escape chars
+            .replace(/\r(?!\n)/g, '')                // Carriage returns (keep newlines)
+            .replace(/[─━═\-_]{10,}/g, '')           // Long separator lines
+            .replace(/\n{3,}/g, '\n\n')              // Collapse multiple blank lines
+            .trim();
 
           // Detect when Claude is ready and send Susan's memory briefing
           // Look for Claude's ready prompts: >, ❯, "What would you like", "How can I help"
