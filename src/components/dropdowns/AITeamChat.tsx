@@ -30,11 +30,11 @@ interface AITeamChatProps {
   userName?: string;
 }
 
-// Optimal sizing for AI Team Chat - bigger and wider
+// Optimal sizing for AI Team Chat - wider for readability
 const MIN_WIDTH = 600;
-const MIN_HEIGHT = 600;
-const DEFAULT_WIDTH = 700;
-const DEFAULT_HEIGHT = 800;
+const MIN_HEIGHT = 500;
+const DEFAULT_WIDTH = 900;
+const DEFAULT_HEIGHT = 650;
 
 export default function AITeamChat({
   onSendToClaudeTerminal,
