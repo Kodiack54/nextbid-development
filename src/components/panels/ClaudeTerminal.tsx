@@ -446,6 +446,11 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('❯')) continue;
             // - User input echo (lines starting with > followed by text)
             if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
+            // - TUI instruction lines
+            if (trimmedLine.includes('Enter to select')) continue;
+            if (trimmedLine.includes('Tab/Arrow keys')) continue;
+            if (trimmedLine.includes('Esc to cancel')) continue;
+            if (trimmedLine.includes('to navigate')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
