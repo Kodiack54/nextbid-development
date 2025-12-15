@@ -105,6 +105,7 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSentMessageRef = useRef<string>('');
   const recentMessagesRef = useRef<Set<string>>(new Set()); // Track recent message signatures
+  const susanBriefingSentRef = useRef<boolean>(false); // Session-level Susan briefing tracking
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -447,6 +448,8 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('❯')) continue;
             // - User input echo (lines starting with > followed by text)
             if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
+            // - Short user input echo (just > followed by 1-3 chars, like "> k" or "> y")
+            if (/^>\s*[a-zA-Z0-9]{1,3}$/.test(trimmedLine)) continue;
             // - TUI instruction/tip lines
             if (trimmedLine.includes('Enter to select')) continue;
             if (trimmedLine.includes('Tab/Arrow keys')) continue;
@@ -461,6 +464,11 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('terminal?')) continue; // Filter ANY line with terminal?
             if (trimmedLine.includes('asted text #')) continue; // "Pasted text #1" indicator
             if (trimmedLine.includes('+1 lines]')) continue; // Paste line count indicator
+            // - Guest passes notification spam
+            if (trimmedLine.includes('guest passes')) continue;
+            if (trimmedLine.includes('/passes')) continue;
+            if (trimmedLine.includes('CC ✻')) continue; // Claude Code branding icon
+            if (trimmedLine.includes('┊ (')) continue; // Status bar separator
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -471,6 +479,8 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('ctrl-g to edit')) continue;
             // - Claude Code UI chrome
             if (trimmedLine.startsWith('Try "')) continue;
+            if (trimmedLine.startsWith('Try \'')) continue;
+            if (trimmedLine.includes('Try "')) continue; // Catch mid-line suggestions too
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
             // - Welcome banner parts (filter repeated banner spam)
             if (trimmedLine.includes('Claude Code v')) continue;
@@ -533,16 +543,13 @@ export function ClaudeTerminal({
                 return;
               }
 
-              // Skip Susan briefing duplicates (check for briefing markers)
+              // Skip Susan briefing duplicates (session-level - only send ONCE per connection)
               if (bufferedContent.includes('SUSAN') && bufferedContent.includes('BRIEFING')) {
-                if (recentMessagesRef.current.has('susan-briefing')) {
+                if (susanBriefingSentRef.current) {
                   responseBufferRef.current = '';
                   return;
                 }
-                recentMessagesRef.current.add('susan-briefing');
-                setTimeout(() => {
-                  recentMessagesRef.current.delete('susan-briefing');
-                }, 60000); // Susan briefing dedup lasts 1 minute
+                susanBriefingSentRef.current = true; // Mark as sent for entire session
               }
 
               // Skip echoed user instructions (long prompts that get echoed back)
@@ -654,6 +661,8 @@ export function ClaudeTerminal({
     setConnected(false);
     setMemoryStatus('idle');
     setSusanContext(null);
+    susanBriefingSentRef.current = false; // Reset for next connection
+    recentMessagesRef.current.clear(); // Clear dedup cache
   }, []);
 
   // Expose connect function via ref (for click-to-connect from AI Team Chat)
