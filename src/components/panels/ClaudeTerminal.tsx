@@ -399,7 +399,6 @@ export function ClaudeTerminal({
             .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences (title bar, etc)
             .replace(/\x1b/g, '')                    // Any remaining escape chars
             .replace(/\r(?!\n)/g, '')                // Carriage returns (keep newlines)
-            // NOTE: Removed separator line stripping - was breaking ASCII boxes
             .replace(/\n{3,}/g, '\n\n')              // Collapse multiple blank lines
             .trim();
 
@@ -513,6 +512,8 @@ export function ClaudeTerminal({
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
             // NOTE: Welcome banner, boxes, and ASCII art are ALLOWED through
             // Only filtering actual TUI spam that repeats 50+ times
+            // - TUI separator lines (ONLY dashes, no corners) - but allow box lines with corners
+            if (/^[─━═]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure separator spam
             // - Empty standalone bullet markers (not part of content)
             if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
 
