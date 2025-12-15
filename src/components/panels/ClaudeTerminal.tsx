@@ -23,7 +23,7 @@ export interface ConversationMessage {
   created_at: string;
 }
 
-// Susan's startup context
+// Susan's startup context - full memory briefing
 interface SusanContext {
   greeting: string | null;
   lastSession: {
@@ -35,6 +35,11 @@ interface SusanContext {
   } | null;
   recentMessages: Array<{ role: string; content: string; created_at: string }>;
   relevantKnowledge: Array<{ category: string; title: string; summary: string }>;
+  todos: Array<{ id: string; title: string; description: string; priority: string; status: string }>;
+  projectInfo: { name: string; path: string; databases: string[] } | null;
+  ports: Array<{ port: number; service: string; description: string }>;
+  schemas: Array<{ table_name: string; prefix: string; description: string }>;
+  fileStructure: { directories: Array<{ path: string; description: string }>; keyFiles: Array<{ path: string; description: string }> } | null;
 }
 
 interface ClaudeTerminalProps {
@@ -55,36 +60,16 @@ const CHAD_URL = `ws://${DEV_DROPLET}:5401`;
 const SUSAN_URL = `http://${DEV_DROPLET}:5403`;
 
 // Build context prompt to send to Claude on startup
+// Susan builds the full greeting on server-side, we just use it
 function buildContextPrompt(context: SusanContext): string {
-  const parts: string[] = [];
-
-  parts.push("Susan (your librarian) loaded your memory. Here's where we left off:");
-
-  if (context.lastSession) {
-    if (context.lastSession.summary) {
-      parts.push(`\nLast session: ${context.lastSession.summary}`);
-    }
+  // Susan already built a comprehensive greeting with:
+  // - Project info, ports, todos, schemas, files, knowledge, recent conversation
+  if (context.greeting) {
+    return context.greeting;
   }
 
-  if (context.recentMessages.length > 0) {
-    parts.push("\nRecent conversation:");
-    context.recentMessages.slice(-3).forEach(m => {
-      const role = m.role === 'user' ? 'User' : 'You';
-      const preview = m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content;
-      parts.push(`- ${role}: ${preview}`);
-    });
-  }
-
-  if (context.relevantKnowledge.length > 0) {
-    parts.push("\nKnowledge I remember:");
-    context.relevantKnowledge.slice(0, 3).forEach(k => {
-      parts.push(`- [${k.category}] ${k.title}`);
-    });
-  }
-
-  parts.push("\nLet me know what you'd like to continue working on.");
-
-  return parts.join('\n');
+  // Fallback if no greeting from Susan
+  return "Susan couldn't load your memory. Starting fresh - what would you like to work on?";
 }
 
 export function ClaudeTerminal({
@@ -310,10 +295,25 @@ export function ClaudeTerminal({
         xtermRef.current.writeln('\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m');
         xtermRef.current.writeln('\x1b[90m   Starting Claude Code...\x1b[0m');
 
-        // Check if Susan has context
+        // Check if Susan has context - show detailed loading status
         const context = await contextPromise;
-        if (context?.lastSession) {
-          xtermRef.current.writeln('\x1b[35m   📚 Loading memory from Susan...\x1b[0m');
+        if (context) {
+          xtermRef.current.writeln('\x1b[35m   📚 Susan is loading your memory...\x1b[0m');
+          if (context.todos?.length > 0) {
+            xtermRef.current.writeln(`\x1b[90m      ✓ ${context.todos.length} pending todos\x1b[0m`);
+          }
+          if (context.ports?.length > 0) {
+            xtermRef.current.writeln(`\x1b[90m      ✓ ${context.ports.length} port assignments\x1b[0m`);
+          }
+          if (context.schemas?.length > 0) {
+            xtermRef.current.writeln(`\x1b[90m      ✓ ${context.schemas.length} database tables\x1b[0m`);
+          }
+          if (context.lastSession) {
+            xtermRef.current.writeln(`\x1b[90m      ✓ Previous session found\x1b[0m`);
+          }
+          xtermRef.current.writeln('\x1b[35m   📚 Memory loaded! Will brief Claude when ready...\x1b[0m');
+        } else {
+          xtermRef.current.writeln('\x1b[33m   ⚠️ Susan unavailable - starting without memory\x1b[0m');
         }
         xtermRef.current.writeln('');
       }
@@ -350,10 +350,24 @@ export function ClaudeTerminal({
           // Parse output for chat log - look for Claude responses
           const cleanData = msg.data.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '');
 
-          // Detect when Claude is ready (shows the > prompt) and send Susan's context
+          // Detect when Claude is ready and send Susan's memory briefing
+          // Look for Claude's ready prompts: >, ❯, "What would you like", "How can I help"
           if (!contextSentRef.current && susanContext?.greeting) {
-            if (cleanData.includes('>') || cleanData.includes('What would you like')) {
+            const isClaudeReady = cleanData.includes('>') ||
+                                  cleanData.includes('❯') ||
+                                  cleanData.includes('What would you like') ||
+                                  cleanData.includes('How can I help') ||
+                                  cleanData.includes('ready to help');
+
+            if (isClaudeReady) {
               contextSentRef.current = true;
+
+              // Show briefing status in terminal
+              if (xtermRef.current) {
+                xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
+              }
+
+              // Wait a moment then send the full context
               setTimeout(() => {
                 if (ws.readyState === WebSocket.OPEN) {
                   const contextMessage = buildContextPrompt(susanContext);
@@ -362,42 +376,55 @@ export function ClaudeTerminal({
                     if (ws.readyState === WebSocket.OPEN) {
                       ws.send(JSON.stringify({ type: 'input', data: '\r' }));
                     }
-                  }, 50);
+                  }, 100);
                 }
-              }, 500);
+              }, 1000); // Give Claude a second to fully render
             }
           }
 
           // Buffer response text for debounced parsing
-          // Look for Claude's bullet responses (● prefix indicates Claude speaking)
-          if (cleanData.includes('●')) {
-            // Extract all bullet points from this chunk
-            const bulletMatches = cleanData.match(/●\s*[^\n●]+/g);
-            if (bulletMatches) {
-              bulletMatches.forEach((match: string) => {
-                const content = match.replace(/^●\s*/, '').trim();
-                if (content.length > 5) {
-                  responseBufferRef.current += content + '\n';
-                }
-              });
+          // Look for Claude's responses: bullets (●), questions (?), and numbered options (1. 2. 3.)
+          const lines = cleanData.split(/[\r\n]+/);
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            // Bullet points (● prefix indicates Claude speaking)
+            if (trimmedLine.startsWith('●')) {
+              const content = trimmedLine.replace(/^●\s*/, '').trim();
+              if (content.length > 5) {
+                responseBufferRef.current += content + '\n';
+              }
+            }
+            // Questions (lines ending with ?)
+            else if (trimmedLine.endsWith('?') && trimmedLine.length > 10) {
+              responseBufferRef.current += trimmedLine + '\n';
+            }
+            // Numbered options (1. or 1) style)
+            else if (/^\d+[.)\]]\s+.+/.test(trimmedLine) && trimmedLine.length > 5) {
+              responseBufferRef.current += trimmedLine + '\n';
+            }
+            // Lettered options (a. or a) style)
+            else if (/^[a-zA-Z][.)\]]\s+.+/.test(trimmedLine) && trimmedLine.length > 5) {
+              responseBufferRef.current += trimmedLine + '\n';
             }
           }
 
-          // Debounce: Wait for output to settle before sending to chat
-          if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-          }
+          // Detect if Claude's response is complete (prompt reappeared)
+          const isResponseComplete = cleanData.includes('❯') ||
+                                     cleanData.includes('> ') ||
+                                     cleanData.includes('? ') ||  // Question prompt
+                                     cleanData.match(/\n>\s*$/);  // Prompt at end of line
 
-          debounceTimerRef.current = setTimeout(() => {
+          // Function to send buffered content to chat
+          const sendBufferedContent = () => {
             const bufferedContent = responseBufferRef.current.trim();
 
             // Only send if we have meaningful content and it's different from last
             if (bufferedContent.length > 10 && bufferedContent !== lastSentMessageRef.current) {
-              // Skip bash/tool output (usually contains lots of symbols or is very repetitive)
-              const isToolOutput = bufferedContent.includes('curl') ||
-                                   bufferedContent.includes('├') ||
-                                   bufferedContent.includes('└') ||
-                                   (bufferedContent.match(/\|/g) || []).length > 5;
+              // Skip only actual command execution output (not grids Claude intentionally shows)
+              const isToolOutput = bufferedContent.includes('curl ') ||
+                                   bufferedContent.includes('npm install') ||
+                                   bufferedContent.includes('node_modules');
 
               if (!isToolOutput) {
                 lastSentMessageRef.current = bufferedContent;
@@ -425,7 +452,22 @@ export function ClaudeTerminal({
 
               responseBufferRef.current = '';
             }
-          }, 1500); // Wait 1.5s after last output before sending to chat
+          };
+
+          // If response is complete, send immediately
+          if (isResponseComplete && responseBufferRef.current.length > 10) {
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current);
+            }
+            sendBufferedContent();
+          } else {
+            // Otherwise debounce: Wait for output to settle before sending to chat
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current);
+            }
+
+            debounceTimerRef.current = setTimeout(sendBufferedContent, 3000); // Wait 3s for full response
+          }
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
