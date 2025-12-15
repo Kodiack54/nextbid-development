@@ -56,9 +56,9 @@ interface ClaudeTerminalProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
-// AI Team worker URLs
+// AI Team worker URLs (Development droplet)
 const DEV_DROPLET = '161.35.229.220';
-const CHAD_URL = `ws://${DEV_DROPLET}:5401`;
+const CHAD_WS_URL = `ws://${DEV_DROPLET}:5401/ws`; // WebSocket path for Chad
 const SUSAN_URL = `http://${DEV_DROPLET}:5403`;
 
 // Build context prompt to send to Claude on startup
@@ -253,13 +253,39 @@ export function ClaudeTerminal({
     return null;
   }, [projectPath]);
 
+  // Track Chad session ID for logging
+  const chadSessionIdRef = useRef<string | null>(null);
+
   // Connect to Chad for transcription
   const connectToChad = useCallback(() => {
     try {
-      const chadWs = new WebSocket(`${CHAD_URL}?path=${encodeURIComponent(projectPath)}`);
-      chadWs.onopen = () => console.log('[ClaudeTerminal] Connected to Chad');
-      chadWs.onerror = () => console.log('[ClaudeTerminal] Chad not available');
-      chadWs.onclose = () => console.log('[ClaudeTerminal] Chad disconnected');
+      // Chad expects: /ws?project=<path>&userId=<id>
+      const chadWs = new WebSocket(`${CHAD_WS_URL}?project=${encodeURIComponent(projectPath)}&userId=michael`);
+
+      chadWs.onopen = () => {
+        console.log('[ClaudeTerminal] Connected to Chad for transcription');
+        // Request a session start
+        chadWs.send(JSON.stringify({ type: 'session_start', payload: {} }));
+      };
+
+      chadWs.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'session_started' || msg.type === 'session_created') {
+            chadSessionIdRef.current = msg.sessionId;
+            console.log('[ClaudeTerminal] Chad session started:', msg.sessionId);
+          }
+        } catch (err) {
+          console.log('[ClaudeTerminal] Chad message parse error:', err);
+        }
+      };
+
+      chadWs.onerror = (err) => console.log('[ClaudeTerminal] Chad WebSocket error:', err);
+      chadWs.onclose = () => {
+        console.log('[ClaudeTerminal] Chad disconnected');
+        chadSessionIdRef.current = null;
+      };
+
       chadWsRef.current = chadWs;
     } catch (err) {
       console.log('[ClaudeTerminal] Could not connect to Chad:', err);
@@ -269,7 +295,14 @@ export function ClaudeTerminal({
   // Send output to Chad for transcription
   const sendToChad = useCallback((data: string) => {
     if (chadWsRef.current?.readyState === WebSocket.OPEN) {
-      chadWsRef.current.send(JSON.stringify({ type: 'output', data }));
+      // Chad expects: { type: 'terminal_output', payload: { sessionId, data } }
+      chadWsRef.current.send(JSON.stringify({
+        type: 'terminal_output',
+        payload: {
+          sessionId: chadSessionIdRef.current,
+          data
+        }
+      }));
     }
   }, []);
 
