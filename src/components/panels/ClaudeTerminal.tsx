@@ -438,12 +438,14 @@ export function ClaudeTerminal({
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Skip TUI noise (spinners, status, prompts):
+            // Skip TUI noise (spinners, status, prompts, echoes):
             // - Empty lines at very start
             if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
             // - Shell prompts
             if (trimmedLine === '$' || trimmedLine === '%' || trimmedLine === '>') continue;
             if (trimmedLine.startsWith('❯')) continue;
+            // - User input echo (lines starting with > followed by text)
+            if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -458,7 +460,10 @@ export function ClaudeTerminal({
 
             // Everything else goes through - INCLUDING box drawing!
             if (trimmedLine.length === 0) {
-              responseBufferRef.current += '\n';
+              // Only add blank line if last char isn't already a newline (prevent gaps)
+              if (!responseBufferRef.current.endsWith('\n\n')) {
+                responseBufferRef.current += '\n';
+              }
             } else {
               responseBufferRef.current += trimmedLine + '\n';
             }
