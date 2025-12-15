@@ -106,6 +106,7 @@ export function ClaudeTerminal({
   const lastSentMessageRef = useRef<string>('');
   const recentMessagesRef = useRef<Set<string>>(new Set()); // Track recent message signatures
   const susanBriefingSentRef = useRef<boolean>(false); // Session-level Susan briefing tracking
+  const inSusanBriefingRef = useRef<boolean>(false); // Track if currently inside a briefing block
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -441,6 +442,24 @@ export function ClaudeTerminal({
             const trimmedLine = line.trim();
 
             // Skip TUI noise (spinners, status, prompts, echoes):
+            // - Susan briefing duplicate detection at LINE level
+            // Track entering/exiting briefing blocks
+            if (trimmedLine.includes('=== SUSAN') && trimmedLine.includes('BRIEFING')) {
+              if (susanBriefingSentRef.current) {
+                inSusanBriefingRef.current = true; // We're in a duplicate briefing
+                continue;
+              }
+              // First briefing - let it through
+              susanBriefingSentRef.current = true;
+            }
+            if (trimmedLine.includes('=== END BRIEFING ===')) {
+              if (inSusanBriefingRef.current) {
+                inSusanBriefingRef.current = false; // Exit duplicate briefing block
+                continue;
+              }
+            }
+            // Skip all lines while inside a duplicate briefing block
+            if (inSusanBriefingRef.current) continue;
             // - Empty lines at very start
             if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
             // - Shell prompts
@@ -493,10 +512,9 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('Opus 4.5')) continue;
             if (trimmedLine.includes('Claude Max')) continue;
             if (trimmedLine.includes("'s Organization")) continue;
-            // - Welcome banner box lines (decorative only)
-            if (/^[╭╮╯╰│─]+$/.test(trimmedLine)) continue;
+            // - Welcome banner box lines (ONLY the curved corners from welcome banner, not user ASCII art)
+            if (/^[╭╮╯╰─]+$/.test(trimmedLine)) continue; // Curved corners only (not │)
             if (trimmedLine.startsWith('╭───') || trimmedLine.startsWith('╰')) continue;
-            if (trimmedLine === '│' || trimmedLine.startsWith('│ ') && trimmedLine.endsWith(' │')) continue;
             // - Decorative stars/blocks from banner
             if (/^[*\s▐▛▜▝▘█]+$/.test(trimmedLine)) continue;
             // - Path lines from banner (just the project path)
@@ -662,6 +680,7 @@ export function ClaudeTerminal({
     setMemoryStatus('idle');
     setSusanContext(null);
     susanBriefingSentRef.current = false; // Reset for next connection
+    inSusanBriefingRef.current = false; // Reset briefing block tracking
     recentMessagesRef.current.clear(); // Clear dedup cache
   }, []);
 
