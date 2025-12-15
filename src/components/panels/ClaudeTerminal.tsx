@@ -7,73 +7,32 @@ import type { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useUser } from '@/app/contexts/UserContext';
 
-export interface ChatLogMessage {
-  id: string;
-  source: 'claude' | 'chad';
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+// Import from terminal module
+import {
+  type ChatLogMessage,
+  type ConversationMessage,
+  type ClaudeTerminalProps,
+  DEV_DROPLET,
+  CHAT_DEBOUNCE_MS,
+  MIN_CONTENT_LENGTH,
+  DEDUP_COOLDOWN_MS,
+  BRIEFING_FALLBACK_MS,
+  POST_BRIEFING_DELAY_MS,
+  filterForChat,
+  shouldFilterContent,
+  cleanAnsiCodes,
+  sendChunkedMessage,
+  sendMultipleEnters,
+  sendArrowKey,
+  sendEscape,
+  sendEnter,
+  useSusanBriefing,
+  buildContextPrompt,
+  useChadTranscription,
+} from './terminal';
 
-// Simple message format for AI Team Chat
-export interface ConversationMessage {
-  id: string;
-  user_id: string;
-  user_name: string;
-  content: string;
-  created_at: string;
-}
-
-// Susan's startup context - full memory briefing
-interface SusanContext {
-  greeting: string | null;
-  lastSession: {
-    id: string;
-    projectPath: string;
-    startedAt: string;
-    endedAt: string;
-    summary: string | null;
-  } | null;
-  recentMessages: Array<{ role: string; content: string; created_at: string }>;
-  relevantKnowledge: Array<{ category: string; title: string; summary: string }>;
-  todos: Array<{ id: string; title: string; description: string; priority: string; status: string }>;
-  projectInfo: { name: string; path: string; databases: string[] } | null;
-  ports: Array<{ port: number; service: string; description: string }>;
-  schemas: Array<{ table_name: string; prefix: string; description: string }>;
-  fileStructure: { directories: Array<{ path: string; description: string }>; keyFiles: Array<{ path: string; description: string }> } | null;
-}
-
-interface ClaudeTerminalProps {
-  projectPath?: string;
-  wsUrl?: string;
-  onMessage?: (message: ChatLogMessage) => void;
-  // Expose send function for external use (AI Team Chat)
-  sendRef?: React.MutableRefObject<((message: string) => void) | null>;
-  // Expose connect function for external use (click to connect)
-  connectRef?: React.MutableRefObject<(() => void) | null>;
-  // Callback for conversation messages (cleaner format for chat display)
-  onConversationMessage?: (message: ConversationMessage) => void;
-  // Callback for connection state changes
-  onConnectionChange?: (connected: boolean) => void;
-}
-
-// AI Team worker URLs (Development droplet)
-const DEV_DROPLET = '161.35.229.220';
-const CHAD_WS_URL = `ws://${DEV_DROPLET}:5401/ws`; // WebSocket path for Chad
-const SUSAN_URL = `http://${DEV_DROPLET}:5403`;
-
-// Build context prompt to send to Claude on startup
-// Susan builds the full greeting on server-side, we just use it
-function buildContextPrompt(context: SusanContext): string {
-  // Susan already built a comprehensive greeting with:
-  // - Project info, ports, todos, schemas, files, knowledge, recent conversation
-  if (context.greeting) {
-    return context.greeting;
-  }
-
-  // Fallback if no greeting from Susan
-  return "Susan couldn't load your memory. Starting fresh - what would you like to work on?";
-}
+// Re-export types for external consumers
+export type { ChatLogMessage, ConversationMessage };
 
 export function ClaudeTerminal({
   projectPath = '/var/www/NextBid_Dev/dev-studio-5000',
@@ -86,9 +45,7 @@ export function ClaudeTerminal({
 }: ClaudeTerminalProps) {
   const { user } = useUser();
   const wsRef = useRef<WebSocket | null>(null);
-  const chadWsRef = useRef<WebSocket | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
-  const messageBufferRef = useRef<string>('');
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -97,57 +54,36 @@ export function ClaudeTerminal({
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [memoryStatus, setMemoryStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
-  const [susanContext, setSusanContext] = useState<SusanContext | null>(null);
-  const susanContextRef = useRef<SusanContext | null>(null); // Ref for WebSocket closure access
 
-  // Simple buffering for chat display
+  // Use extracted hooks
+  const {
+    memoryStatus,
+    susanContext,
+    susanContextRef,
+    fetchSusanContext,
+    reset: resetSusan,
+  } = useSusanBriefing(projectPath);
+
+  const {
+    connectToChad,
+    sendToChad,
+    disconnect: disconnectChad,
+  } = useChadTranscription(projectPath, user?.id);
+
+  // Chat buffering refs
   const responseBufferRef = useRef<string>('');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const recentMessagesRef = useRef<string[]>([]); // Last few messages for dedup
+  const recentMessagesRef = useRef<string[]>([]);
   const lastMessageTimeRef = useRef<number>(0);
-  const briefingSentToClaudeRef = useRef<boolean>(false); // Track if briefing was actually sent to Claude
-  const showedReadyMessageRef = useRef<boolean>(false); // Track if we showed "Ready to work!"
-  const readyToShowMessagesRef = useRef<boolean>(false); // Delay before showing messages after briefing
+  const briefingSentToClaudeRef = useRef<boolean>(false);
+  const showedReadyMessageRef = useRef<boolean>(false);
+  const readyToShowMessagesRef = useRef<boolean>(false);
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Handle chunking for long messages (same as internal input handler)
-      const CHUNK_SIZE = 1000;
-      if (message.length > CHUNK_SIZE) {
-        const chunks: string[] = [];
-        for (let i = 0; i < message.length; i += CHUNK_SIZE) {
-          chunks.push(message.slice(i, i + CHUNK_SIZE));
-        }
-        let chunkIndex = 0;
-        const sendNextChunk = () => {
-          if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
-            chunkIndex++;
-            if (chunkIndex < chunks.length) {
-              setTimeout(sendNextChunk, 50);
-            } else {
-              setTimeout(() => {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                }
-              }, 100);
-            }
-          }
-        };
-        sendNextChunk();
-      } else {
-        // Short message - send normally
-        wsRef.current.send(JSON.stringify({ type: 'input', data: message }));
-        setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-          }
-        }, 50);
-      }
+      sendChunkedMessage(wsRef.current, message);
 
-      // Add user message to conversation
       if (onConversationMessage) {
         onConversationMessage({
           id: `user-${Date.now()}`,
@@ -157,8 +93,6 @@ export function ClaudeTerminal({
           created_at: new Date().toISOString(),
         });
       }
-
-      // Note: Echo filtering now handled by Chad server-side
     }
   }, [onConversationMessage]);
 
@@ -169,39 +103,36 @@ export function ClaudeTerminal({
     }
   }, [sendRef, sendMessage, connected]);
 
-
   // Notify parent of connection changes
   useEffect(() => {
     onConnectionChange?.(connected);
   }, [connected, onConnectionChange]);
 
-  // Initialize xterm.js - dynamically import to avoid SSR issues
+  // Initialize xterm.js
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
-    // Dynamic import for client-side only
     const initTerminal = async () => {
       const { Terminal } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
 
       const term = new Terminal({
         theme: {
-          // Dark mode with bright red/green (Claude Code style)
-          background: '#0d1117',      // Dark background
-          foreground: '#e6edf3',      // Light text
-          cursor: '#58a6ff',          // Blue cursor
+          background: '#0d1117',
+          foreground: '#e6edf3',
+          cursor: '#58a6ff',
           cursorAccent: '#0d1117',
           black: '#0d1117',
-          red: '#ff7b72',             // Bright red
-          green: '#3fb950',           // Bright green
+          red: '#ff7b72',
+          green: '#3fb950',
           yellow: '#d29922',
           blue: '#58a6ff',
           magenta: '#bc8cff',
           cyan: '#39c5cf',
           white: '#e6edf3',
           brightBlack: '#484f58',
-          brightRed: '#ffa198',       // Brighter red
-          brightGreen: '#56d364',     // Brighter green
+          brightRed: '#ffa198',
+          brightGreen: '#56d364',
           brightYellow: '#e3b341',
           brightBlue: '#79c0ff',
           brightMagenta: '#d2a8ff',
@@ -224,7 +155,6 @@ export function ClaudeTerminal({
         term.open(terminalRef.current);
         fitAddon.fit();
 
-        // Welcome message
         term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
         term.writeln('\x1b[36m   👨‍💻 Claude - Lead Programmer (5400)      \x1b[0m');
         term.writeln('\x1b[36m═══════════════════════════════════════════\x1b[0m');
@@ -240,7 +170,6 @@ export function ClaudeTerminal({
 
     initTerminal();
 
-    // Handle resize - both window and container
     const handleResize = () => {
       if (fitAddonRef.current) {
         setTimeout(() => fitAddonRef.current?.fit(), 100);
@@ -248,7 +177,6 @@ export function ClaudeTerminal({
     };
     window.addEventListener('resize', handleResize);
 
-    // ResizeObserver for container size changes
     const resizeObserver = new ResizeObserver(handleResize);
     if (terminalRef.current) {
       resizeObserver.observe(terminalRef.current);
@@ -265,108 +193,23 @@ export function ClaudeTerminal({
     };
   }, []);
 
-  // Fetch context from Susan before connecting
-  const fetchSusanContext = useCallback(async () => {
-    setMemoryStatus('loading');
-    try {
-      const response = await fetch(
-        `${SUSAN_URL}/api/context?project=${encodeURIComponent(projectPath)}`
-      );
-      if (response.ok) {
-        const context = await response.json();
-        setSusanContext(context);
-        susanContextRef.current = context; // Store in ref for WebSocket closure
-        setMemoryStatus('loaded');
-        return context;
-      }
-    } catch (err) {
-      console.log('[ClaudeTerminal] Susan not available:', err);
-    }
-    setMemoryStatus('error');
-    return null;
-  }, [projectPath]);
-
-  // Track Chad session ID for logging
-  const chadSessionIdRef = useRef<string | null>(null);
-
-  // Connect to Chad for transcription
-  const connectToChad = useCallback(() => {
-    if (!user?.id) {
-      console.log('[ClaudeTerminal] No user ID available for Chad connection');
-      return;
-    }
-    try {
-      // Chad expects: /ws?project=<path>&userId=<uuid>
-      const chadWs = new WebSocket(`${CHAD_WS_URL}?project=${encodeURIComponent(projectPath)}&userId=${user.id}`);
-
-      chadWs.onopen = () => {
-        console.log('[ClaudeTerminal] Connected to Chad for transcription');
-        // Request a session start
-        chadWs.send(JSON.stringify({ type: 'session_start', payload: {} }));
-      };
-
-      chadWs.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'session_started' || msg.type === 'session_created') {
-            chadSessionIdRef.current = msg.sessionId;
-            console.log('[ClaudeTerminal] Chad session started:', msg.sessionId);
-          }
-          // Note: Chad handles session transcription for Susan, not real-time chat
-        } catch (err) {
-          console.log('[ClaudeTerminal] Chad message parse error:', err);
-        }
-      };
-
-      chadWs.onerror = (err) => console.log('[ClaudeTerminal] Chad WebSocket error:', err);
-      chadWs.onclose = () => {
-        console.log('[ClaudeTerminal] Chad disconnected');
-        chadSessionIdRef.current = null;
-      };
-
-      chadWsRef.current = chadWs;
-    } catch (err) {
-      console.log('[ClaudeTerminal] Could not connect to Chad:', err);
-    }
-  }, [projectPath, user, onConversationMessage]);
-
-  // Send output to Chad for transcription
-  const sendToChad = useCallback((data: string) => {
-    if (chadWsRef.current?.readyState === WebSocket.OPEN) {
-      // Chad expects: { type: 'terminal_output', payload: { sessionId, data } }
-      chadWsRef.current.send(JSON.stringify({
-        type: 'terminal_output',
-        payload: {
-          sessionId: chadSessionIdRef.current,
-          data
-        }
-      }));
-    }
-  }, []);
-
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setConnecting(true);
     contextSentRef.current = false;
 
-    // 1. Fetch context from Susan (parallel with terminal connect)
     const contextPromise = fetchSusanContext();
-
-    // 2. Connect to Chad for transcription
     connectToChad();
 
-    // 3. Connect to Claude terminal
     const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
-
     const ws = new WebSocket(fullUrl);
 
     ws.onopen = async () => {
       setConnected(true);
       setConnecting(false);
 
-      // Show "gathering thoughts" message in chat immediately
       if (onConversationMessage) {
         onConversationMessage({
           id: `claude-${Date.now()}`,
@@ -383,7 +226,6 @@ export function ClaudeTerminal({
         xtermRef.current.writeln('\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m');
         xtermRef.current.writeln('\x1b[90m   Starting Claude Code...\x1b[0m');
 
-        // Check if Susan has context - show detailed loading status
         const context = await contextPromise;
         if (context) {
           xtermRef.current.writeln('\x1b[35m   📚 Susan is loading your memory...\x1b[0m');
@@ -406,7 +248,6 @@ export function ClaudeTerminal({
         xtermRef.current.writeln('');
       }
 
-      // Send terminal size
       if (fitAddonRef.current && xtermRef.current) {
         ws.send(JSON.stringify({
           type: 'resize',
@@ -415,14 +256,13 @@ export function ClaudeTerminal({
         }));
       }
 
-      // Auto-start Claude after 2 seconds
       setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'input', data: 'claude\r' }));
         }
       }, 2000);
 
-      // Fallback: If Susan briefing hasn't been sent after 12 seconds, send it anyway
+      // Fallback: If Susan briefing hasn't been sent after 12 seconds
       setTimeout(() => {
         const ctx = susanContextRef.current;
         if (!contextSentRef.current && ctx?.greeting && ws.readyState === WebSocket.OPEN) {
@@ -435,48 +275,16 @@ export function ClaudeTerminal({
           }
 
           const contextMessage = buildContextPrompt(ctx);
-          // Helper to send multiple Enters to ensure submission
-          const sendEnters = () => {
-            [100, 300, 500].forEach(delay => {
+          sendChunkedMessage(ws, contextMessage, () => {
+            sendMultipleEnters(ws, () => {
               setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: 'input', data: '\r' }));
-                }
-              }, delay);
+                readyToShowMessagesRef.current = true;
+                console.log('[ClaudeTerminal] Ready to show chat messages (fallback)');
+              }, POST_BRIEFING_DELAY_MS);
             });
-            // Wait 5 seconds for all echo spam to clear before showing chat messages
-            setTimeout(() => {
-              readyToShowMessagesRef.current = true;
-              console.log('[ClaudeTerminal] Ready to show chat messages (fallback)');
-            }, 5000);
-          };
-
-          // Send in chunks
-          const CHUNK_SIZE = 1000;
-          if (contextMessage.length > CHUNK_SIZE) {
-            const chunks: string[] = [];
-            for (let i = 0; i < contextMessage.length; i += CHUNK_SIZE) {
-              chunks.push(contextMessage.slice(i, i + CHUNK_SIZE));
-            }
-            let chunkIndex = 0;
-            const sendNextChunk = () => {
-              if (chunkIndex < chunks.length && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
-                chunkIndex++;
-                if (chunkIndex < chunks.length) {
-                  setTimeout(sendNextChunk, 50);
-                } else {
-                  sendEnters();
-                }
-              }
-            };
-            sendNextChunk();
-          } else {
-            ws.send(JSON.stringify({ type: 'input', data: contextMessage }));
-            sendEnters();
-          }
+          });
         }
-      }, 12000); // 12 second fallback
+      }, BRIEFING_FALLBACK_MS);
 
       inputRef.current?.focus();
     };
@@ -485,204 +293,60 @@ export function ClaudeTerminal({
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output' && xtermRef.current) {
-          // Write directly to xterm - it handles all escape codes natively!
           xtermRef.current.write(msg.data);
-          // Auto-scroll to bottom
           xtermRef.current.scrollToBottom();
-
-          // Forward to Chad for transcription
           sendToChad(msg.data);
 
-          // Parse output for chat log - look for Claude responses
-          // Comprehensive ANSI cleaning
-          const cleanData = msg.data
-            .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')  // ESC [ ... letter (cursor, colors, etc)
-            .replace(/\[([0-9;]*[A-Za-z])/g, '')    // Visible codes without ESC prefix
-            .replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '') // Cursor visibility/mode sequences
-            .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences (title bar, etc)
-            .replace(/\x1b/g, '')                    // Any remaining escape chars
-            .replace(/\r(?!\n)/g, '')                // Carriage returns (keep newlines)
-            .replace(/\n{3,}/g, '\n\n')              // Collapse multiple blank lines
-            .trim();
+          const cleanData = cleanAnsiCodes(msg.data);
 
-          // Detect when Claude is ready and send Susan's memory briefing
+          // Detect Claude ready and send Susan's briefing
           const currentContext = susanContextRef.current;
           if (!contextSentRef.current && currentContext?.greeting) {
-            // Debug: log what we're seeing to help diagnose
             if (cleanData.length > 10) {
               console.log('[ClaudeTerminal] Checking for ready prompt in:', cleanData.slice(-100));
             }
 
-            // Look for Claude's ready indicators - be very flexible
             const isClaudeReady = cleanData.includes('What would you like') ||
                                   cleanData.includes('How can I help') ||
                                   cleanData.includes('What can I help') ||
                                   cleanData.includes('help you with') ||
                                   cleanData.includes('work on today') ||
                                   cleanData.includes('assist you') ||
-                                  // Various prompt characters at end
                                   /[❯>›»]\s*$/.test(cleanData) ||
                                   cleanData.includes('❯') ||
-                                  // After Claude Code loads and shows its UI
                                   (cleanData.includes('Opus') && cleanData.includes('Claude'));
 
             if (isClaudeReady) {
               contextSentRef.current = true;
               console.log('[ClaudeTerminal] Detected Claude ready prompt, sending Susan briefing');
 
-              // Show briefing status in terminal
               if (xtermRef.current) {
                 xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
               }
 
-              // Send the context as input
               setTimeout(() => {
                 if (wsRef.current?.readyState === WebSocket.OPEN) {
                   const contextMessage = buildContextPrompt(currentContext);
                   console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
-
-                  // Mark that we're sending the briefing now
                   briefingSentToClaudeRef.current = true;
 
-                  // Helper to send multiple Enters to ensure submission
-                  const sendEnters = () => {
-                    [100, 300, 500].forEach(delay => {
+                  sendChunkedMessage(wsRef.current, contextMessage, () => {
+                    sendMultipleEnters(wsRef.current!, () => {
                       setTimeout(() => {
-                        if (wsRef.current?.readyState === WebSocket.OPEN) {
-                          wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                        }
-                      }, delay);
+                        readyToShowMessagesRef.current = true;
+                        console.log('[ClaudeTerminal] Ready to show chat messages');
+                      }, POST_BRIEFING_DELAY_MS);
                     });
-                    // Wait 5 seconds for all echo spam to clear before showing chat messages
-                    setTimeout(() => {
-                      readyToShowMessagesRef.current = true;
-                      console.log('[ClaudeTerminal] Ready to show chat messages');
-                    }, 5000);
-                  };
-
-                  // Send the message in chunks if it's long
-                  const CHUNK_SIZE = 1000;
-                  if (contextMessage.length > CHUNK_SIZE) {
-                    const chunks: string[] = [];
-                    for (let i = 0; i < contextMessage.length; i += CHUNK_SIZE) {
-                      chunks.push(contextMessage.slice(i, i + CHUNK_SIZE));
-                    }
-                    let chunkIndex = 0;
-                    const sendNextChunk = () => {
-                      if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
-                        chunkIndex++;
-                        if (chunkIndex < chunks.length) {
-                          setTimeout(sendNextChunk, 50);
-                        } else {
-                          sendEnters();
-                        }
-                      }
-                    };
-                    sendNextChunk();
-                  } else {
-                    wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
-                    sendEnters();
-                  }
+                  });
                 }
-              }, 500); // Short delay after detecting prompt
+              }, 500);
             }
           }
 
-          // Simple filtering for chat display - just strip TUI noise, pass content through
-          const lines = cleanData.split('\n');
-          for (const line of lines) {
-            const trimmed = line.trim();
-
-            // Skip empty lines at start of buffer
-            if (!trimmed && !responseBufferRef.current) continue;
-
-            // Skip obvious TUI noise - aggressive filtering
-            if (!trimmed) { responseBufferRef.current += '\n'; continue; }
-
-            // FILTER Susan's briefing content - don't show in chat (it's visible in terminal)
-            // This includes the briefing itself AND the echo when it's sent to Claude
-            if (trimmed.includes('LAST SESSION') ||
-                trimmed.includes('RECENT CONVERSATION') ||
-                trimmed.includes('KEY KNOWLEDGE') ||
-                trimmed.includes('END BRIEFING') ||
-                trimmed.includes("I've gathered") ||
-                trimmed.includes('Ready to continue') ||
-                trimmed.includes("What's the priority") ||
-                trimmed.includes('Summary:') ||
-                trimmed.startsWith('You:') ||
-                trimmed.startsWith('Claude:') ||
-                // Susan's knowledge category tags like [ug-fix], [rchitecture], [onfig]
-                /^\s*\w*-?\w*\]/.test(trimmed) ||
-                /\[[\w-]+\]/.test(trimmed) ||
-                // Briefing emojis
-                /^[⏰💬🧠📋]/.test(trimmed) ||
-                // Partial escape codes that leak through
-                /^\[\d+/.test(trimmed) ||
-                trimmed === 'm' ||
-                trimmed === 'claude') continue;
-
-            // Spinners and thinking indicators
-            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+/.test(trimmed)) continue; // Lines starting with spinners
-            if (/Flibbertigibbet|Cogitating|Ruminating|Pondering|Cerebrating/i.test(trimmed)) continue; // Claude's thinking words
-
-            // Claude Code help/info text that gets spammed
-            if (trimmed.includes('.claude/commands/')) continue;
-            if (trimmed.includes('commands that work in any project')) continue;
-            if (trimmed.includes('~/.claude/')) continue;
-
-            // Tool output and TUI prompts
-            if (trimmed.includes('tool uses')) continue;
-            if (trimmed.includes('ctrl+o to')) continue;
-            if (trimmed.includes('ctrl+b to')) continue;
-            if (trimmed.includes('Do you want to proceed')) continue;
-            if (trimmed.includes('Esc to cancel')) continue;
-            if (trimmed.includes('MCP tools')) continue;
-            if (trimmed.startsWith('Explore(')) continue;
-            if (trimmed.startsWith('Read ') && trimmed.includes(' lines')) continue;
-            if (/^\+\d+ more/.test(trimmed)) continue;
-            if (/^❯\s*\d+\./.test(trimmed)) continue; // Menu options like "❯ 1. Yes"
-            if (trimmed === '1. Yes' || trimmed === '2. Yes,' || trimmed.startsWith('3. Type here')) continue;
-
-            // Session-specific content that's being echoed
-            if (trimmed.includes('conduct a series of message-sending tests')) continue;
-            if (trimmed.includes('terminal-to-chat API')) continue;
-            if (trimmed.includes('Bash command')) continue;
-            if (trimmed.includes('find /var/www')) continue;
-            if (trimmed.includes('esc to interrupt') || trimmed.includes('to interrupt)')) continue;
-            // Horizontal separators
-            if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue;
-            // TUI box structure - filter ANY line containing │ that's mostly whitespace
-            if (trimmed.includes('│') && trimmed.replace(/[│\s]/g, '').length < 20) continue;
-            // Box drawing lines
-            if (/^[╭╮╯╰┌┐└┘├┤┬┴┼│─═║]+/.test(trimmed)) continue;
-            // Try/Tip messages
-            if (trimmed.startsWith('Try "') || trimmed.startsWith("Try '")) continue;
-            if (trimmed.includes('Tip:') || trimmed.startsWith('⎿') || trimmed.includes('⎿')) continue;
-            // Thinking/status indicators
-            if (trimmed.includes('Thinking') || trimmed.includes('Ideating')) continue;
-            if (trimmed.includes('Thought for')) continue;
-            if (trimmed.includes('ctrl+o to show')) continue;
-            if (trimmed.includes('Using tool:')) continue;
-            if (trimmed.includes('for shortcuts')) continue;
-            // Pass/queue spam
-            if (trimmed.includes('/passes')) continue;
-            if (trimmed.includes('guest passes')) continue;
-            if (trimmed.includes('queued messages')) continue;
-            if (trimmed.includes('that turn')) continue;
-            // Prompts
-            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue;
-            if (/^>\s*.+/.test(trimmed)) continue;
-            // Claude Code TUI header
-            if (trimmed.includes('Claude Code v') || trimmed.includes('Welcome back')) continue;
-            if (trimmed.includes('Tips for') || trimmed.includes('Run /init')) continue;
-            if (trimmed.includes('Recent') && (trimmed.includes('activity') || trimmed.includes('ac…'))) continue;
-            if (trimmed.includes("Organization") || trimmed.includes("Opus 4")) continue;
-            if (/^\*\s*[▘▝▖▗▐▛█▜▌]+\s*\*$/.test(trimmed)) continue; // ASCII art
-            if (trimmed.includes('mdj5422@gmail.com')) continue; // Email in header
-
-            // Pass everything else through (tables, emojis, code, etc.)
-            responseBufferRef.current += line + '\n';
+          // Filter and buffer for chat display
+          const filteredContent = filterForChat(msg.data);
+          if (filteredContent) {
+            responseBufferRef.current += filteredContent;
           }
 
           // Debounce: send buffered content after output settles
@@ -690,42 +354,17 @@ export function ClaudeTerminal({
           debounceTimerRef.current = setTimeout(() => {
             const content = responseBufferRef.current.trim();
 
-            // Skip if no meaningful content
-            if (content.length < 20) {
+            if (content.length < MIN_CONTENT_LENGTH) {
               responseBufferRef.current = '';
               return;
             }
 
-            // Skip Susan's briefing content entirely (it's in the terminal, not chat)
-            if (content.includes('LAST SESSION') ||
-                content.includes('END BRIEFING') ||
-                content.includes("I've gathered") ||
-                content.includes('Hey Claude,') ||
-                content.includes('Summary:') ||
-                content.includes('RECENT CONVERSATION') ||
-                content.includes('KEY KNOWLEDGE') ||
-                // Multiple "You:" entries is definitely briefing echo
-                (content.match(/You:/g) || []).length > 1 ||
-                // Susan's knowledge tags
-                content.includes('ug-fix]') ||
-                content.includes('rchitecture]') ||
-                content.includes('onfig]')) {
+            if (shouldFilterContent(content)) {
               responseBufferRef.current = '';
               return;
             }
 
-            // Skip terminal system messages (not Claude's responses)
-            if (content.includes('Dev Studio Terminal') ||
-                content.includes('Type \'claude\'') ||
-                content.includes('root@') ||
-                content.includes('Connected to') ||
-                content.includes('.claude/commands/') ||
-                content.includes('commands that work in any project')) {
-              responseBufferRef.current = '';
-              return;
-            }
-
-            // Robust deduplication
+            // Deduplication
             const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
             const isDuplicate = recentMessagesRef.current.some(recent => {
               const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
@@ -737,7 +376,7 @@ export function ClaudeTerminal({
             });
 
             const now = Date.now();
-            const tooSoon = now - lastMessageTimeRef.current < 1500;
+            const tooSoon = now - lastMessageTimeRef.current < DEDUP_COOLDOWN_MS;
 
             if (!isDuplicate && !tooSoon) {
               recentMessagesRef.current.push(content);
@@ -747,13 +386,11 @@ export function ClaudeTerminal({
               lastMessageTimeRef.current = now;
 
               if (onConversationMessage) {
-                // Wait until briefing spam has cleared before showing any messages
                 if (!readyToShowMessagesRef.current) {
                   responseBufferRef.current = '';
                   return;
                 }
 
-                // Only show "Ready to work!" AFTER briefing was sent AND spam has cleared
                 if (briefingSentToClaudeRef.current && !showedReadyMessageRef.current) {
                   showedReadyMessageRef.current = true;
                   onConversationMessage({
@@ -765,7 +402,6 @@ export function ClaudeTerminal({
                   });
                 }
 
-                // Then show the actual response
                 onConversationMessage({
                   id: `claude-${Date.now()}`,
                   user_id: 'claude',
@@ -776,7 +412,7 @@ export function ClaudeTerminal({
               }
             }
             responseBufferRef.current = '';
-          }, 2000);
+          }, CHAT_DEBOUNCE_MS);
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
@@ -806,76 +442,84 @@ export function ClaudeTerminal({
     };
 
     wsRef.current = ws;
-  }, [projectPath, wsUrl]);
+  }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, onConversationMessage, susanContextRef]);
 
   const disconnect = useCallback(() => {
     wsRef.current?.close();
     wsRef.current = null;
-    chadWsRef.current?.close();
-    chadWsRef.current = null;
+    disconnectChad();
     setConnected(false);
-    setMemoryStatus('idle');
-    setSusanContext(null);
-    // Reset chat state for next session
+    resetSusan();
     briefingSentToClaudeRef.current = false;
     showedReadyMessageRef.current = false;
     readyToShowMessagesRef.current = false;
     recentMessagesRef.current = [];
     responseBufferRef.current = '';
-  }, []);
+  }, [disconnectChad, resetSusan]);
 
-  // Expose connect function via ref (for click-to-connect from AI Team Chat)
+  // Expose connect function via ref
   useEffect(() => {
     if (connectRef) {
       connectRef.current = connect;
     }
   }, [connectRef, connect]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const currentValue = (e.target as HTMLTextAreaElement).value;
+      if (currentValue.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+        const text = currentValue.trim();
+        sendChunkedMessage(wsRef.current, text);
+        if (onConversationMessage) {
+          onConversationMessage({
+            id: `user-${Date.now()}`,
+            user_id: 'me',
+            user_name: 'You',
+            content: text.length > 500 ? text.slice(0, 500) + `... (${text.length} chars)` : text,
+            created_at: new Date().toISOString(),
+          });
+        }
+        setInputValue('');
+      } else if (!currentValue.trim() && wsRef.current) {
+        sendEnter(wsRef.current);
+      }
+    } else if (e.key === 'Escape' && wsRef.current) {
+      sendEscape(wsRef.current);
+    } else if (e.key === 'ArrowUp' && wsRef.current) {
+      e.preventDefault();
+      sendArrowKey(wsRef.current, 'up');
+    } else if (e.key === 'ArrowDown' && wsRef.current) {
+      e.preventDefault();
+      sendArrowKey(wsRef.current, 'down');
+    } else if (e.key === 'ArrowRight' && wsRef.current) {
+      e.preventDefault();
+      sendArrowKey(wsRef.current, 'right');
+    } else if (e.key === 'ArrowLeft' && wsRef.current) {
+      e.preventDefault();
+      sendArrowKey(wsRef.current, 'left');
+    }
+  }, [onConversationMessage]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    const target = e.target as HTMLTextAreaElement;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const currentVal = target.value;
+    const newValue = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
+
+    target.value = newValue;
+    setInputValue(newValue);
+    const newCursorPos = start + pastedText.length;
+    target.setSelectionRange(newCursorPos, newCursorPos);
+    e.preventDefault();
+  }, []);
+
   const sendInput = useCallback(() => {
-    console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input length:', inputValue.length);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       if (inputValue.trim()) {
-        // For long input, chunk it to avoid overwhelming the terminal
-        const CHUNK_SIZE = 1000;
-        const text = inputValue;
-
-        if (text.length > CHUNK_SIZE) {
-          // Send in chunks with delays
-          const chunks: string[] = [];
-          for (let i = 0; i < text.length; i += CHUNK_SIZE) {
-            chunks.push(text.slice(i, i + CHUNK_SIZE));
-          }
-
-          let chunkIndex = 0;
-          const sendNextChunk = () => {
-            if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
-              chunkIndex++;
-              if (chunkIndex < chunks.length) {
-                setTimeout(sendNextChunk, 50);
-              } else {
-                // All chunks sent, now send Enter
-                setTimeout(() => {
-                  if (wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                  }
-                }, 100);
-              }
-            }
-          };
-          sendNextChunk();
-        } else {
-          // Short input - send normally
-          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
-          setTimeout(() => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-            }
-          }, 50);
-        }
-
-        // Log to conversation (for AI Team Chat to display)
-        // Truncate very long pastes in the chat log
+        sendChunkedMessage(wsRef.current, inputValue);
         if (onConversationMessage) {
           const displayContent = inputValue.length > 500
             ? inputValue.slice(0, 500) + `... (${inputValue.length} chars)`
@@ -889,14 +533,11 @@ export function ClaudeTerminal({
           });
         }
       } else {
-        // Just send Enter for empty input (confirmations, etc.)
-        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+        sendEnter(wsRef.current);
       }
       setInputValue('');
-    } else {
-      console.log('[ClaudeTerminal] WebSocket not open');
     }
-  }, [inputValue, connected, onConversationMessage]);
+  }, [inputValue, onConversationMessage]);
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
@@ -953,14 +594,14 @@ export function ClaudeTerminal({
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Terminal output - xterm.js handles all the TUI rendering */}
+      {/* Terminal output */}
       <div
         ref={terminalRef}
         className="flex-1 min-h-0 overflow-x-auto overflow-y-auto"
         style={{ padding: '8px' }}
       />
 
-      {/* Input area - separate textarea since xterm keyboard wasn't working */}
+      {/* Input area */}
       <div className="shrink-0 p-2 bg-gray-800 border-t border-gray-700">
         <div className="flex gap-2">
           <span className="text-orange-400 font-mono text-sm pt-2">$</span>
@@ -968,105 +609,8 @@ export function ClaudeTerminal({
             ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onPaste={(e) => {
-              // Get pasted text and update both DOM and state immediately
-              const pastedText = e.clipboardData.getData('text');
-              const target = e.target as HTMLTextAreaElement;
-              const start = target.selectionStart;
-              const end = target.selectionEnd;
-              const currentVal = target.value; // Use DOM value, not React state
-              const newValue = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
-
-              // Update DOM directly for immediate availability
-              target.value = newValue;
-              // Also update React state for controlled component
-              setInputValue(newValue);
-              // Set cursor position after pasted text
-              const newCursorPos = start + pastedText.length;
-              target.setSelectionRange(newCursorPos, newCursorPos);
-              e.preventDefault();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                // Use the textarea's current value directly to avoid state timing issues
-                const currentValue = (e.target as HTMLTextAreaElement).value;
-                if (currentValue.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-                  // Send the value directly
-                  const text = currentValue.trim();
-                  if (text.length > 1000) {
-                    // Chunk long input
-                    const chunks: string[] = [];
-                    for (let i = 0; i < text.length; i += 1000) {
-                      chunks.push(text.slice(i, i + 1000));
-                    }
-                    let chunkIndex = 0;
-                    const sendNextChunk = () => {
-                      if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
-                        chunkIndex++;
-                        if (chunkIndex < chunks.length) {
-                          setTimeout(sendNextChunk, 50);
-                        } else {
-                          setTimeout(() => {
-                            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                            }
-                          }, 100);
-                        }
-                      }
-                    };
-                    sendNextChunk();
-                  } else {
-                    wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
-                    setTimeout(() => {
-                      if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                      }
-                    }, 50);
-                  }
-                  // Log to conversation
-                  if (onConversationMessage) {
-                    onConversationMessage({
-                      id: `user-${Date.now()}`,
-                      user_id: 'me',
-                      user_name: 'You',
-                      content: text.length > 500 ? text.slice(0, 500) + `... (${text.length} chars)` : text,
-                      created_at: new Date().toISOString(),
-                    });
-                  }
-                  setInputValue('');
-                } else if (!currentValue.trim()) {
-                  // Empty input - just send Enter for confirmations
-                  wsRef.current?.send(JSON.stringify({ type: 'input', data: '\r' }));
-                }
-              } else if (e.key === 'Escape') {
-                // Send Escape character for TUI navigation
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b' }));
-                }
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[A' }));
-                }
-              } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[B' }));
-                }
-              } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[C' }));
-                }
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[D' }));
-                }
-              }
-            }}
+            onPaste={handlePaste}
+            onKeyDown={handleKeyDown}
             disabled={!connected}
             placeholder={connected ? 'Type command and press Enter (Shift+Enter for new line)...' : 'Click Connect first'}
             rows={6}
