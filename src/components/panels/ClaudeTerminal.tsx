@@ -5,6 +5,7 @@ import { Power, PowerOff, FolderOpen, Brain } from 'lucide-react';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { useUser } from '@/app/contexts/UserContext';
 
 export interface ChatLogMessage {
   id: string;
@@ -83,6 +84,7 @@ export function ClaudeTerminal({
   onConversationMessage,
   onConnectionChange,
 }: ClaudeTerminalProps) {
+  const { user } = useUser();
   const wsRef = useRef<WebSocket | null>(null);
   const chadWsRef = useRef<WebSocket | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -283,9 +285,13 @@ export function ClaudeTerminal({
 
   // Connect to Chad for transcription
   const connectToChad = useCallback(() => {
+    if (!user?.id) {
+      console.log('[ClaudeTerminal] No user ID available for Chad connection');
+      return;
+    }
     try {
-      // Chad expects: /ws?project=<path>&userId=<id>
-      const chadWs = new WebSocket(`${CHAD_WS_URL}?project=${encodeURIComponent(projectPath)}&userId=michael`);
+      // Chad expects: /ws?project=<path>&userId=<uuid>
+      const chadWs = new WebSocket(`${CHAD_WS_URL}?project=${encodeURIComponent(projectPath)}&userId=${user.id}`);
 
       chadWs.onopen = () => {
         console.log('[ClaudeTerminal] Connected to Chad for transcription');
@@ -327,7 +333,7 @@ export function ClaudeTerminal({
     } catch (err) {
       console.log('[ClaudeTerminal] Could not connect to Chad:', err);
     }
-  }, [projectPath]);
+  }, [projectPath, user, onConversationMessage]);
 
   // Send output to Chad for transcription
   const sendToChad = useCallback((data: string) => {
