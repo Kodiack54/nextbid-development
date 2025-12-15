@@ -157,26 +157,27 @@ export function ClaudeTerminal({
 
       const term = new Terminal({
         theme: {
-          background: '#1a1b26',
-          foreground: '#c0caf5',
-          cursor: '#c0caf5',
-          cursorAccent: '#1a1b26',
-          black: '#15161e',
-          red: '#f7768e',
-          green: '#9ece6a',
-          yellow: '#e0af68',
-          blue: '#7aa2f7',
-          magenta: '#bb9af7',
-          cyan: '#7dcfff',
-          white: '#a9b1d6',
-          brightBlack: '#414868',
-          brightRed: '#f7768e',
-          brightGreen: '#9ece6a',
-          brightYellow: '#e0af68',
-          brightBlue: '#7aa2f7',
-          brightMagenta: '#bb9af7',
-          brightCyan: '#7dcfff',
-          brightWhite: '#c0caf5',
+          // Dark mode with bright red/green (Claude Code style)
+          background: '#0d1117',      // Dark background
+          foreground: '#e6edf3',      // Light text
+          cursor: '#58a6ff',          // Blue cursor
+          cursorAccent: '#0d1117',
+          black: '#0d1117',
+          red: '#ff7b72',             // Bright red
+          green: '#3fb950',           // Bright green
+          yellow: '#d29922',
+          blue: '#58a6ff',
+          magenta: '#bc8cff',
+          cyan: '#39c5cf',
+          white: '#e6edf3',
+          brightBlack: '#484f58',
+          brightRed: '#ffa198',       // Brighter red
+          brightGreen: '#56d364',     // Brighter green
+          brightYellow: '#e3b341',
+          brightBlue: '#79c0ff',
+          brightMagenta: '#d2a8ff',
+          brightCyan: '#56d4dd',
+          brightWhite: '#ffffff',
         },
         fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
         fontSize: 13,
@@ -506,26 +507,9 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('Try \'')) continue;
             if (trimmedLine.includes('Try "')) continue; // Catch mid-line suggestions too
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
-            // - Welcome banner parts (filter repeated banner spam)
-            if (trimmedLine.includes('Claude Code v')) continue;
-            if (trimmedLine.includes('Welcome back')) continue;
-            if (trimmedLine.includes('Tips for')) continue;
-            if (trimmedLine.includes('getting started')) continue;
-            if (trimmedLine.includes('Run /init')) continue;
-            if (trimmedLine.includes('Recent activity')) continue;
-            if (trimmedLine.includes('No recent ac')) continue;
-            if (trimmedLine.includes('Opus 4.5')) continue;
-            if (trimmedLine.includes('Claude Max')) continue;
-            if (trimmedLine.includes("'s Organization")) continue;
-            // - Welcome banner box lines (ONLY the curved corners from welcome banner, not user ASCII art)
-            if (/^[╭╮╯╰─]+$/.test(trimmedLine)) continue; // Curved corners only (not │)
-            if (trimmedLine.startsWith('╭───') || trimmedLine.startsWith('╰')) continue;
-            // - Decorative stars/blocks from banner
-            if (/^[*\s▐▛▜▝▘█]+$/.test(trimmedLine)) continue;
-            // - Path lines from banner (just the project path)
-            if (trimmedLine === '/var/www/NextBid_Dev/dev-studio-5000') continue;
-            if (trimmedLine.match(/^\/var\/www\/[^\s]+$/)) continue; // Any bare path
-            // - Empty bullet markers
+            // NOTE: Welcome banner, boxes, and ASCII art are ALLOWED through
+            // Only filtering actual TUI spam that repeats 50+ times
+            // - Empty standalone bullet markers (not part of content)
             if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
 
             // Everything else goes through - INCLUDING box drawing!
