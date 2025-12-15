@@ -104,7 +104,8 @@ export function ClaudeTerminal({
   // Simple buffering for chat display
   const responseBufferRef = useRef<string>('');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const recentMessagesRef = useRef<Set<string>>(new Set());
+  const recentMessagesRef = useRef<string[]>([]); // Last few messages for dedup
+  const lastMessageTimeRef = useRef<number>(0);
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -477,7 +478,7 @@ export function ClaudeTerminal({
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+$/.test(trimmed)) continue; // Spinners
             if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue; // Horizontal separators (with whitespace)
-            if (/[─━═]{3,}/.test(trimmed) && trimmed.length < 50 && !/[a-zA-Z]{3,}/.test(trimmed)) continue; // Lines mostly dashes
+            if (/[─━═╭╮╯╰│]{3,}/.test(trimmed) && !/[a-zA-Z]{4,}/.test(trimmed)) continue; // Lines with box chars but no words
             if (trimmed.startsWith('Try "') || trimmed.startsWith("Try '")) continue;
             if (trimmed.includes('Thinking') || trimmed.includes('Ideating')) continue;
             if (trimmed.includes('Thought for')) continue;
@@ -494,11 +495,16 @@ export function ClaudeTerminal({
             if (trimmed.includes('Tip:')) continue; // Tip label
             if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue; // Bare prompts
             if (/^>\s*.+/.test(trimmed)) continue; // All > prompt lines (user echo)
-            // Box drawing chars - filter if line is mostly box structure
-            if (/^[\s┌┐└┘├┤┬┴┼│─═║╔╗╚╝╠╣╦╩╬]+$/.test(trimmed)) continue; // Pure box chars
-            if ((trimmed.startsWith('┌') || trimmed.startsWith('└') || trimmed.startsWith('│') ||
-                 trimmed.startsWith('├') || trimmed.startsWith('╭') || trimmed.startsWith('╰')) &&
-                trimmed.length < 80 && !/[a-zA-Z]{5,}/.test(trimmed)) continue; // Box lines without much text
+            // Box drawing chars - filter TUI box structure
+            if (/^[\s┌┐└┘├┤┬┴┼│─═║╔╗╚╝╠╣╦╩╬╭╮╯╰]+$/.test(trimmed)) continue; // Pure box chars
+            if (/^[╭╮╯╰┌┐└┘│├┤]/.test(trimmed) && /[─━═╭╮│┌┐└┘]{5,}/.test(trimmed)) continue; // Box structure lines
+            // Skip Claude Code TUI header/welcome lines
+            if (trimmed.includes('Claude Code v') || trimmed.includes('Welcome back')) continue;
+            if (trimmed.includes('getting') && trimmed.includes('started')) continue;
+            if (trimmed.includes('Recent') && trimmed.includes('activity')) continue;
+            if (trimmed.includes('No recent ac')) continue;
+            if (trimmed.includes("Organization")) continue;
+            if (/^\*\s+[▘▝▖▗]+\s+\*$/.test(trimmed)) continue; // ASCII art stars
 
             // Pass everything else through (tables, emojis, code, etc.)
             responseBufferRef.current += line + '\n';
@@ -508,12 +514,29 @@ export function ClaudeTerminal({
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
           debounceTimerRef.current = setTimeout(() => {
             const content = responseBufferRef.current.trim();
-            if (content.length > 3) {
-              // Simple dedup
-              const sig = content.slice(0, 200);
-              if (!recentMessagesRef.current.has(sig)) {
-                recentMessagesRef.current.add(sig);
-                setTimeout(() => recentMessagesRef.current.delete(sig), 30000);
+            if (content.length > 10) {
+              // Robust deduplication - check against recent messages
+              const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
+              const isDuplicate = recentMessagesRef.current.some(recent => {
+                const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
+                // Check if content is similar (80%+ overlap)
+                if (normalizedContent === normalizedRecent) return true;
+                if (normalizedContent.includes(normalizedRecent.slice(0, 100))) return true;
+                if (normalizedRecent.includes(normalizedContent.slice(0, 100))) return true;
+                return false;
+              });
+
+              // Also check timing - don't send if last message was < 1 second ago
+              const now = Date.now();
+              const tooSoon = now - lastMessageTimeRef.current < 1000;
+
+              if (!isDuplicate && !tooSoon) {
+                // Keep last 10 messages for dedup
+                recentMessagesRef.current.push(content);
+                if (recentMessagesRef.current.length > 10) {
+                  recentMessagesRef.current.shift();
+                }
+                lastMessageTimeRef.current = now;
 
                 if (onConversationMessage) {
                   onConversationMessage({
