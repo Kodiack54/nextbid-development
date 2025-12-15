@@ -477,6 +477,24 @@ export function ClaudeTerminal({
 
             // Skip obvious TUI noise - aggressive filtering
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
+
+            // ALLOW-LIST: Susan's briefing content - always let through
+            const isBriefingContent = trimmed.includes('LAST SESSION') ||
+                                      trimmed.includes('RECENT CONVERSATION') ||
+                                      trimmed.includes('KEY KNOWLEDGE') ||
+                                      trimmed.includes('END BRIEFING') ||
+                                      trimmed.includes("I've gathered") ||
+                                      trimmed.includes('Summary:') ||
+                                      trimmed.includes('Ready to continue') ||
+                                      trimmed.includes("What's the priority") ||
+                                      trimmed.startsWith('You:') ||
+                                      trimmed.startsWith('Claude:') ||
+                                      /^[⏰💬🧠📋]/.test(trimmed); // Briefing emojis
+            if (isBriefingContent) {
+              responseBufferRef.current += line + '\n';
+              continue;
+            }
+
             // Spinners and thinking indicators
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+/.test(trimmed)) continue; // Lines starting with spinners
             if (/Flibbertigibbet|Cogitating|Ruminating|Pondering|Cerebrating/i.test(trimmed)) continue; // Claude's thinking words
