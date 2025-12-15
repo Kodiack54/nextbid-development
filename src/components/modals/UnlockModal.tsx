@@ -18,9 +18,24 @@ export function UnlockModal({ project, userId, onClose, onUnlock }: UnlockModalP
   const [patchNotes, setPatchNotes] = useState('');
   const [changesSummary, setChangesSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleUnlock = async () => {
-    if (!patchNotes.trim() || !project || !userId) return;
+    setError(null);
+
+    if (!project) {
+      setError('No project selected');
+      return;
+    }
+    if (!userId) {
+      setError('User not authenticated. Please refresh and try again.');
+      return;
+    }
+    if (!patchNotes.trim()) {
+      setError('Patch notes are required');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -78,6 +93,12 @@ export function UnlockModal({ project, userId, onClose, onUnlock }: UnlockModalP
             />
           </div>
         </div>
+
+        {error && (
+          <div className="mt-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-300 text-sm">
+            {error}
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="px-4 py-2 text-gray-400 hover:text-white">
