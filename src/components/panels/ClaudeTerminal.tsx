@@ -434,6 +434,17 @@ export function ClaudeTerminal({
           }
 
           const contextMessage = buildContextPrompt(ctx);
+          // Helper to send multiple Enters to ensure submission
+          const sendEnters = () => {
+            [100, 300, 500].forEach(delay => {
+              setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+                }
+              }, delay);
+            });
+          };
+
           // Send in chunks
           const CHUNK_SIZE = 1000;
           if (contextMessage.length > CHUNK_SIZE) {
@@ -449,22 +460,14 @@ export function ClaudeTerminal({
                 if (chunkIndex < chunks.length) {
                   setTimeout(sendNextChunk, 50);
                 } else {
-                  setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                      ws.send(JSON.stringify({ type: 'input', data: '\r' }));
-                    }
-                  }, 100);
+                  sendEnters();
                 }
               }
             };
             sendNextChunk();
           } else {
             ws.send(JSON.stringify({ type: 'input', data: contextMessage }));
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'input', data: '\r' }));
-              }
-            }, 100);
+            sendEnters();
           }
         }
       }, 12000); // 12 second fallback
@@ -533,6 +536,17 @@ export function ClaudeTerminal({
                   // Mark that we're sending the briefing now
                   briefingSentToClaudeRef.current = true;
 
+                  // Helper to send multiple Enters to ensure submission
+                  const sendEnters = () => {
+                    [100, 300, 500].forEach(delay => {
+                      setTimeout(() => {
+                        if (wsRef.current?.readyState === WebSocket.OPEN) {
+                          wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                        }
+                      }, delay);
+                    });
+                  };
+
                   // Send the message in chunks if it's long
                   const CHUNK_SIZE = 1000;
                   if (contextMessage.length > CHUNK_SIZE) {
@@ -548,23 +562,14 @@ export function ClaudeTerminal({
                         if (chunkIndex < chunks.length) {
                           setTimeout(sendNextChunk, 50);
                         } else {
-                          // All chunks sent, send Enter
-                          setTimeout(() => {
-                            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                            }
-                          }, 100);
+                          sendEnters();
                         }
                       }
                     };
                     sendNextChunk();
                   } else {
                     wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
-                    setTimeout(() => {
-                      if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-                      }
-                    }, 100);
+                    sendEnters();
                   }
                 }
               }, 500); // Short delay after detecting prompt
