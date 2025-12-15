@@ -556,9 +556,11 @@ export function ClaudeTerminal({
             let bufferedContent = responseBufferRef.current.trim();
 
             // Post-process content for cleaner formatting
-            // 1. Remove standalone • markers (TUI noise) - they appear before actual content
-            bufferedContent = bufferedContent.replace(/^[•●]\s*\n/gm, '');
-            bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');
+            // 1. Remove • markers at start of lines (TUI noise)
+            // They appear before actual content or on their own
+            bufferedContent = bufferedContent.replace(/^[•●]\s*\n/gm, ''); // Standalone bullet + newline
+            bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');  // Standalone bullet at end
+            bufferedContent = bufferedContent.replace(/^[•●]\s+/gm, '');   // Bullet at start of line with content
             // 2. Join numbered items split across lines (1.\n  Second → 1. Second)
             bufferedContent = bufferedContent.replace(/^(\s*)(\d+\.)\s*\n\s*/gm, '$1$2 ');
             // 3. Normalize bullet spacing
