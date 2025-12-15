@@ -692,19 +692,36 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                   {/* Message Input */}
                   <div className="p-3 border-t border-gray-700 flex-shrink-0">
                     <div className="flex items-center gap-2">
-                      <input
-                        type="text"
+                      <textarea
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
+                        onPaste={(e) => {
+                          // Ensure paste works properly
+                          const pastedText = e.clipboardData.getData('text');
+                          const target = e.target as HTMLTextAreaElement;
+                          const start = target.selectionStart;
+                          const end = target.selectionEnd;
+                          const currentVal = target.value;
+                          const newValue = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
+
+                          // Update DOM directly
+                          target.value = newValue;
+                          setNewMessage(newValue);
+                          // Set cursor position
+                          const newCursorPos = start + pastedText.length;
+                          setTimeout(() => target.setSelectionRange(newCursorPos, newCursorPos), 0);
+                          e.preventDefault();
+                        }}
                         placeholder={
                           activeMember === 'claude'
-                            ? claudeConnected ? 'Message Claude...' : 'Connect terminal first'
+                            ? claudeConnected ? 'Message Claude... (Shift+Enter for new line)' : 'Connect terminal first'
                             : activeMember === 'chad'
                               ? 'Message Chad...'
                               : 'Message Susan...'
                         }
                         disabled={activeMember === 'claude' && !claudeConnected}
-                        className={`flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50 focus:ring-2 ${
+                        rows={1}
+                        className={`flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50 focus:ring-2 resize-none ${
                           activeMember === 'claude'
                             ? 'focus:ring-orange-500'
                             : activeMember === 'chad'
@@ -712,7 +729,8 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                               : 'focus:ring-purple-500'
                         }`}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
                             sendMessage();
                           }
                         }}

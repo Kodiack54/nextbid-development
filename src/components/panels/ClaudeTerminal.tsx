@@ -399,7 +399,7 @@ export function ClaudeTerminal({
             .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences (title bar, etc)
             .replace(/\x1b/g, '')                    // Any remaining escape chars
             .replace(/\r(?!\n)/g, '')                // Carriage returns (keep newlines)
-            .replace(/[─━═\-_]{10,}/g, '')           // Long separator lines
+            // NOTE: Removed separator line stripping - was breaking ASCII boxes
             .replace(/\n{3,}/g, '\n\n')              // Collapse multiple blank lines
             .trim();
 
@@ -461,6 +461,10 @@ export function ClaudeTerminal({
             }
             // Skip all lines while inside a duplicate briefing block
             if (inSusanBriefingRef.current) continue;
+            // - Skip repeated "Ready to continue" lines (Susan briefing footer)
+            if (trimmedLine.includes('Ready to continue where we left off')) {
+              if (susanBriefingSentRef.current) continue; // Only allow first one
+            }
             // - Empty lines at very start
             if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
             // - Shell prompts
