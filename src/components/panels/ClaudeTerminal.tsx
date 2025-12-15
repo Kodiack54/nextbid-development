@@ -514,10 +514,11 @@ export function ClaudeTerminal({
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
             // NOTE: Welcome banner, boxes, and ASCII art are ALLOWED through
             // Only filtering actual TUI spam that repeats 50+ times
-            // - TUI separator lines - horizontal lines made of box-drawing chars
-            // Check for repeated dash/line characters (various Unicode variants)
-            if (/^[─━═\-]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure separator spam
-            if (/^[\u2500-\u257F]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Unicode box drawing range
+            // - TUI separator lines - ONLY pure horizontal lines (no corners/edges)
+            // These are box-drawing horizontal chars: ─ (2500), ━ (2501), ═ (2550)
+            // Box corners/edges we KEEP: ┌┐└┘├┤┬┴┼│ etc.
+            if (/^[─━═\-]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure horizontal separator spam
+            // Don't filter lines with corners - they're part of boxes!
             // - Empty standalone bullet markers (not part of content)
             if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
             // - Tool call status lines (● Search, ● Bash, ● Read, etc.)
@@ -553,22 +554,26 @@ export function ClaudeTerminal({
             let bufferedContent = responseBufferRef.current.trim();
 
             // Post-process content for cleaner formatting
-            // 1. Remove standalone bullets on their own lines (join with next line)
-            bufferedContent = bufferedContent.replace(/^•\s*\n/gm, '• ');
-            // 2. Remove empty bullet lines
-            bufferedContent = bufferedContent.replace(/^•\s*$/gm, '');
-            // 3. Clean up multiple consecutive newlines
+            // 1. Join standalone bullets with next line (• + newline + content → • content)
+            bufferedContent = bufferedContent.replace(/^•\s*\n(\S)/gm, '• $1');
+            // 2. Join numbered items with next line (1.\n + content → 1. content)
+            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n(\S)/gm, '$1 $2');
+            // 3. Remove redundant bullet markers (• - → -)
+            bufferedContent = bufferedContent.replace(/^•\s*-\s*/gm, '- ');
+            // 4. Remove empty bullet/marker lines
+            bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');
+            // 5. Clean up multiple consecutive newlines
             bufferedContent = bufferedContent.replace(/\n{3,}/g, '\n\n');
-            // 4. Remove leading/trailing whitespace from each line but preserve indentation structure
+            // 6. Normalize indentation - trim trailing but keep leading structure
             bufferedContent = bufferedContent.split('\n').map(line => {
-              // Keep intentional indentation (2+ spaces) but trim trailing
-              const match = line.match(/^(\s{2,})/);
-              if (match) {
-                return match[1] + line.trim();
+              // Keep intentional indentation (2+ spaces) but trim trailing whitespace
+              const leadingMatch = line.match(/^(\s+)/);
+              if (leadingMatch) {
+                return leadingMatch[1] + line.trimEnd().slice(leadingMatch[1].length);
               }
               return line.trim();
             }).join('\n');
-            // 5. Final trim
+            // 7. Final trim
             bufferedContent = bufferedContent.trim();
 
             // Only send if we have meaningful content
