@@ -16,6 +16,7 @@ type AITeamMember = 'claude' | 'chad' | 'susan';
 interface AITeamChatProps {
   // Claude terminal integration
   onSendToClaudeTerminal?: (message: string) => void;
+  onConnectClaude?: () => void; // Trigger Claude connect when clicking his name
   claudeConnected?: boolean;
   claudeMessages?: ChatMessage[];
   // Chad API integration
@@ -37,6 +38,7 @@ const DEFAULT_HEIGHT = 800;
 
 export default function AITeamChat({
   onSendToClaudeTerminal,
+  onConnectClaude,
   claudeConnected = false,
   claudeMessages = [],
   onSendToChad,
@@ -271,9 +273,15 @@ export default function AITeamChat({
               <div className="p-2">
                 <p className="text-gray-500 text-xs font-semibold uppercase px-2 mb-1">AI Team</p>
 
-                {/* Claude - green when online, grey when offline */}
+                {/* Claude - green when online, grey when offline. Click to connect if offline */}
                 <button
-                  onClick={() => setActiveMember('claude')}
+                  onClick={() => {
+                    setActiveMember('claude');
+                    // If Claude is offline and we have a connect handler, trigger it
+                    if (!claudeConnected && onConnectClaude) {
+                      onConnectClaude();
+                    }
+                  }}
                   className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors ${
                     activeMember === 'claude'
                       ? claudeConnected
@@ -281,6 +289,7 @@ export default function AITeamChat({
                         : 'bg-gray-600 text-white'
                       : 'text-gray-300 hover:bg-gray-800'
                   }`}
+                  title={claudeConnected ? 'Claude is online' : 'Click to connect Claude'}
                 >
                   <div className="relative text-xl">
                     👨‍💻
@@ -290,7 +299,7 @@ export default function AITeamChat({
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="block truncate font-medium">Claude</span>
-                    <span className="block truncate text-xs opacity-60">{claudeConnected ? 'Online' : 'Offline'}</span>
+                    <span className="block truncate text-xs opacity-60">{claudeConnected ? 'Online' : 'Click to connect'}</span>
                   </div>
                 </button>
 

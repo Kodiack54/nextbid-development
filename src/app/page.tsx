@@ -128,6 +128,7 @@ export default function DevEnvironmentPage() {
   const [chadConversation, setChadConversation] = useState<ConversationMessage[]>([]);
   const [susanConversation, setSusanConversation] = useState<ConversationMessage[]>([]);
   const claudeSendRef = useRef<((message: string) => void) | null>(null);
+  const claudeConnectRef = useRef<(() => void) | null>(null);
 
   // Handler for Claude conversation messages (from terminal)
   const handleClaudeConversation = (msg: ConversationMessage) => {
@@ -597,6 +598,7 @@ User: The Boss`;
 
           <AITeamChat
             onSendToClaudeTerminal={(msg) => claudeSendRef.current?.(msg)}
+            onConnectClaude={() => claudeConnectRef.current?.()}
             claudeConnected={claudeConnected}
             claudeMessages={claudeConversation}
             onSendToChad={handleSendToChad}
@@ -792,6 +794,7 @@ User: The Boss`;
             <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
               <ClaudeTerminal
                 sendRef={claudeSendRef}
+                connectRef={claudeConnectRef}
                 onConversationMessage={handleClaudeConversation}
                 onConnectionChange={setClaudeConnected}
               />

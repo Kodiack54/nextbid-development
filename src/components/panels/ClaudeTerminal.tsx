@@ -48,6 +48,8 @@ interface ClaudeTerminalProps {
   onMessage?: (message: ChatLogMessage) => void;
   // Expose send function for external use (AI Team Chat)
   sendRef?: React.MutableRefObject<((message: string) => void) | null>;
+  // Expose connect function for external use (click to connect)
+  connectRef?: React.MutableRefObject<(() => void) | null>;
   // Callback for conversation messages (cleaner format for chat display)
   onConversationMessage?: (message: ConversationMessage) => void;
   // Callback for connection state changes
@@ -77,6 +79,7 @@ export function ClaudeTerminal({
   wsUrl,
   onMessage,
   sendRef,
+  connectRef,
   onConversationMessage,
   onConnectionChange,
 }: ClaudeTerminalProps) {
@@ -133,6 +136,7 @@ export function ClaudeTerminal({
       sendRef.current = connected ? sendMessage : null;
     }
   }, [sendRef, sendMessage, connected]);
+
 
   // Notify parent of connection changes
   useEffect(() => {
@@ -511,6 +515,13 @@ export function ClaudeTerminal({
     setMemoryStatus('idle');
     setSusanContext(null);
   }, []);
+
+  // Expose connect function via ref (for click-to-connect from AI Team Chat)
+  useEffect(() => {
+    if (connectRef) {
+      connectRef.current = connect;
+    }
+  }, [connectRef, connect]);
 
   const sendInput = useCallback(() => {
     console.log('[ClaudeTerminal] sendInput called, connected:', connected, 'wsState:', wsRef.current?.readyState, 'input length:', inputValue.length);
