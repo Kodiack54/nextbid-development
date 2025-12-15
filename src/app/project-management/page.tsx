@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { Project, TabType, TABS } from './types';
@@ -18,7 +18,16 @@ import CodeChangesTab from './tabs/CodeChangesTab';
 import NotepadTab from './tabs/NotepadTab';
 import BugsTab from './tabs/BugsTab';
 
+// Wrapper component to handle Suspense for useSearchParams
 export default function ProjectManagementPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="animate-spin text-4xl">⚙️</div></div>}>
+      <ProjectManagementContent />
+    </Suspense>
+  );
+}
+
+function ProjectManagementContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectSlug = searchParams.get('project');
