@@ -106,6 +106,7 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recentMessagesRef = useRef<string[]>([]); // Last few messages for dedup
   const lastMessageTimeRef = useRef<number>(0);
+  const briefingSentRef = useRef<boolean>(false); // Track if Susan's briefing was sent
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -476,35 +477,40 @@ export function ClaudeTerminal({
 
             // Skip obvious TUI noise - aggressive filtering
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
-            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+$/.test(trimmed)) continue; // Spinners
-            if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue; // Horizontal separators (with whitespace)
-            if (/[─━═╭╮╯╰│]{3,}/.test(trimmed) && !/[a-zA-Z]{4,}/.test(trimmed)) continue; // Lines with box chars but no words
+            // Spinners and thinking indicators
+            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+/.test(trimmed)) continue; // Lines starting with spinners
+            if (/Flibbertigibbet|Cogitating|Ruminating|Pondering|Cerebrating/i.test(trimmed)) continue; // Claude's thinking words
+            if (trimmed.includes('esc to interrupt') || trimmed.includes('to interrupt)')) continue;
+            // Horizontal separators
+            if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue;
+            // TUI box structure - filter ANY line containing │ that's mostly whitespace
+            if (trimmed.includes('│') && trimmed.replace(/[│\s]/g, '').length < 20) continue;
+            // Box drawing lines
+            if (/^[╭╮╯╰┌┐└┘├┤┬┴┼│─═║]+/.test(trimmed)) continue;
+            // Try/Tip messages
             if (trimmed.startsWith('Try "') || trimmed.startsWith("Try '")) continue;
+            if (trimmed.includes('Tip:') || trimmed.startsWith('⎿') || trimmed.includes('⎿')) continue;
+            // Thinking/status indicators
             if (trimmed.includes('Thinking') || trimmed.includes('Ideating')) continue;
             if (trimmed.includes('Thought for')) continue;
             if (trimmed.includes('ctrl+o to show')) continue;
             if (trimmed.includes('Using tool:')) continue;
-            if (trimmed.includes('(esc to interrupt)')) continue;
             if (trimmed.includes('for shortcuts')) continue;
-            if (trimmed.startsWith('⎿')) continue; // Tip indicator
-            if (trimmed.includes('⎿')) continue; // Tip indicator anywhere
+            // Pass/queue spam
             if (trimmed.includes('/passes')) continue;
             if (trimmed.includes('guest passes')) continue;
             if (trimmed.includes('queued messages')) continue;
-            if (trimmed.includes('that turn')) continue; // Tip box spam
-            if (trimmed.includes('Tip:')) continue; // Tip label
-            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue; // Bare prompts
-            if (/^>\s*.+/.test(trimmed)) continue; // All > prompt lines (user echo)
-            // Box drawing chars - filter TUI box structure
-            if (/^[\s┌┐└┘├┤┬┴┼│─═║╔╗╚╝╠╣╦╩╬╭╮╯╰]+$/.test(trimmed)) continue; // Pure box chars
-            if (/^[╭╮╯╰┌┐└┘│├┤]/.test(trimmed) && /[─━═╭╮│┌┐└┘]{5,}/.test(trimmed)) continue; // Box structure lines
-            // Skip Claude Code TUI header/welcome lines
+            if (trimmed.includes('that turn')) continue;
+            // Prompts
+            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue;
+            if (/^>\s*.+/.test(trimmed)) continue;
+            // Claude Code TUI header
             if (trimmed.includes('Claude Code v') || trimmed.includes('Welcome back')) continue;
-            if (trimmed.includes('getting') && trimmed.includes('started')) continue;
-            if (trimmed.includes('Recent') && trimmed.includes('activity')) continue;
-            if (trimmed.includes('No recent ac')) continue;
-            if (trimmed.includes("Organization")) continue;
-            if (/^\*\s+[▘▝▖▗]+\s+\*$/.test(trimmed)) continue; // ASCII art stars
+            if (trimmed.includes('Tips for') || trimmed.includes('Run /init')) continue;
+            if (trimmed.includes('Recent') && (trimmed.includes('activity') || trimmed.includes('ac…'))) continue;
+            if (trimmed.includes("Organization") || trimmed.includes("Opus 4")) continue;
+            if (/^\*\s*[▘▝▖▗▐▛█▜▌]+\s*\*$/.test(trimmed)) continue; // ASCII art
+            if (trimmed.includes('mdj5422@gmail.com')) continue; // Email in header
 
             // Pass everything else through (tables, emojis, code, etc.)
             responseBufferRef.current += line + '\n';
@@ -515,20 +521,34 @@ export function ClaudeTerminal({
           debounceTimerRef.current = setTimeout(() => {
             const content = responseBufferRef.current.trim();
             if (content.length > 10) {
+              // Check if this is Susan's briefing - only send once per session
+              const isBriefing = content.includes('LAST SESSION:') ||
+                                 content.includes('END BRIEFING') ||
+                                 content.includes("I've gathered everything");
+              if (isBriefing && briefingSentRef.current) {
+                responseBufferRef.current = '';
+                return; // Skip duplicate briefings
+              }
+              if (isBriefing) {
+                briefingSentRef.current = true;
+              }
+
               // Robust deduplication - check against recent messages
               const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
               const isDuplicate = recentMessagesRef.current.some(recent => {
                 const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
-                // Check if content is similar (80%+ overlap)
+                // Exact match
                 if (normalizedContent === normalizedRecent) return true;
-                if (normalizedContent.includes(normalizedRecent.slice(0, 100))) return true;
-                if (normalizedRecent.includes(normalizedContent.slice(0, 100))) return true;
+                // Substring overlap (first 50 chars to be more strict)
+                const sig1 = normalizedContent.slice(0, 50);
+                const sig2 = normalizedRecent.slice(0, 50);
+                if (sig1 === sig2) return true;
                 return false;
               });
 
-              // Also check timing - don't send if last message was < 1 second ago
+              // Also check timing - don't send if last message was < 1.5 seconds ago
               const now = Date.now();
-              const tooSoon = now - lastMessageTimeRef.current < 1000;
+              const tooSoon = now - lastMessageTimeRef.current < 1500;
 
               if (!isDuplicate && !tooSoon) {
                 // Keep last 10 messages for dedup
@@ -590,6 +610,10 @@ export function ClaudeTerminal({
     setConnected(false);
     setMemoryStatus('idle');
     setSusanContext(null);
+    // Reset chat state for next session
+    briefingSentRef.current = false;
+    recentMessagesRef.current = [];
+    responseBufferRef.current = '';
   }, []);
 
   // Expose connect function via ref (for click-to-connect from AI Team Chat)
