@@ -583,8 +583,8 @@ export function ClaudeTerminal({
             // 7. Final trim
             bufferedContent = bufferedContent.trim();
 
-            // Only send if we have meaningful content
-            if (bufferedContent.length > 10) {
+            // Only send if we have meaningful content (lowered to 3 to allow short messages)
+            if (bufferedContent.length > 3) {
               // Create multiple signatures for robust dedup:
               // 1. First 100 chars (catches similar starts)
               // 2. Normalized content hash (catches identical content with whitespace differences)
@@ -657,7 +657,7 @@ export function ClaudeTerminal({
           };
 
           // If response is complete, send after a short delay (let buffer fill)
-          if (isResponseComplete && responseBufferRef.current.length > 10) {
+          if (isResponseComplete && responseBufferRef.current.length > 3) {
             if (debounceTimerRef.current) {
               clearTimeout(debounceTimerRef.current);
             }
