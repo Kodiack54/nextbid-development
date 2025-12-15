@@ -625,9 +625,12 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                               <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
                             </div>
                             <div className="text-gray-300 text-sm mt-0.5 break-words whitespace-pre-wrap">
-                              {msg.content.split('\n').map((line, i) => {
+                              {/* Check if entire message is a box/banner - render as one block */}
+                              {msg.content.includes('╭') && msg.content.includes('╯') ? (
+                                <pre className="font-mono text-xs text-cyan-400 whitespace-pre leading-tight">{msg.content}</pre>
+                              ) : msg.content.split('\n').map((line, i) => {
                                 // Handle box-drawing / ASCII art (render in monospace)
-                                if (/[│├└┌┐┘┬┴┼─═║╔╗╚╝╠╣╦╩╬┃┏┓┗┛┣┫┳┻╋]/.test(line)) {
+                                if (/[│├└┌┐┘┬┴┼─═║╔╗╚╝╠╣╦╩╬┃┏┓┗┛┣┫┳┻╋╮╰╯▐▛▜▝▘]/.test(line)) {
                                   return <pre key={i} className="font-mono text-xs text-cyan-400 whitespace-pre">{line}</pre>;
                                 }
                                 // Handle bullet points
