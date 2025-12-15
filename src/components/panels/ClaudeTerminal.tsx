@@ -423,15 +423,21 @@ export function ClaudeTerminal({
           }
 
           // Buffer response text for debounced parsing
-          // Look for Claude's responses: bullets (●), questions (?), and numbered options (1. 2. 3.)
+          // Capture Claude's responses more permissively
           const lines = cleanData.split(/[\r\n]+/);
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Skip user input echoes (lines starting with > or ❯)
-            if (trimmedLine.startsWith('>') || trimmedLine.startsWith('❯')) {
-              continue;
-            }
+            // Skip empty lines and short noise
+            if (trimmedLine.length < 3) continue;
+
+            // Skip user input echoes and prompts
+            if (trimmedLine.startsWith('>') || trimmedLine.startsWith('❯')) continue;
+            if (trimmedLine === '$' || trimmedLine === '%') continue;
+
+            // Skip obvious system/tool output
+            if (trimmedLine.startsWith('curl ') || trimmedLine.startsWith('npm ')) continue;
+            if (trimmedLine.includes('node_modules')) continue;
 
             // Bullet points (● prefix indicates Claude speaking)
             if (trimmedLine.startsWith('●')) {
@@ -440,16 +446,24 @@ export function ClaudeTerminal({
                 responseBufferRef.current += content + '\n';
               }
             }
-            // Questions (lines ending with ?) - but not short prompts
-            else if (trimmedLine.endsWith('?') && trimmedLine.length > 20) {
+            // Dash bullets (- prefix, common in Claude responses)
+            else if (trimmedLine.startsWith('- ') && trimmedLine.length > 10) {
               responseBufferRef.current += trimmedLine + '\n';
             }
-            // Numbered options (1. or 1) style)
-            else if (/^\d+[.)\]]\s+.+/.test(trimmedLine) && trimmedLine.length > 5) {
+            // Numbered options (1. or 1) or 1: style)
+            else if (/^\d+[.)\]:\-]\s*.+/.test(trimmedLine) && trimmedLine.length > 5) {
               responseBufferRef.current += trimmedLine + '\n';
             }
             // Lettered options (a. or a) style)
             else if (/^[a-zA-Z][.)\]]\s+.+/.test(trimmedLine) && trimmedLine.length > 5) {
+              responseBufferRef.current += trimmedLine + '\n';
+            }
+            // Questions (lines containing ?) - capture full context
+            else if (trimmedLine.includes('?') && trimmedLine.length > 15) {
+              responseBufferRef.current += trimmedLine + '\n';
+            }
+            // Substantial text lines (likely Claude's explanations)
+            else if (trimmedLine.length > 50 && !trimmedLine.includes('│') && !trimmedLine.includes('├')) {
               responseBufferRef.current += trimmedLine + '\n';
             }
           }
