@@ -451,6 +451,8 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('Tab/Arrow keys')) continue;
             if (trimmedLine.includes('Esc to cancel')) continue;
             if (trimmedLine.includes('to navigate')) continue;
+            if (trimmedLine.includes('Press up to edit')) continue;
+            if (trimmedLine.includes('queued messages')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -464,13 +466,15 @@ export function ClaudeTerminal({
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
 
             // Everything else goes through - INCLUDING box drawing!
+            // Preserve original indentation (use line, not trimmedLine)
             if (trimmedLine.length === 0) {
               // Only add blank line if last char isn't already a newline (prevent gaps)
               if (!responseBufferRef.current.endsWith('\n\n')) {
                 responseBufferRef.current += '\n';
               }
             } else {
-              responseBufferRef.current += trimmedLine + '\n';
+              // Keep original line to preserve indentation
+              responseBufferRef.current += line + '\n';
             }
           }
 
