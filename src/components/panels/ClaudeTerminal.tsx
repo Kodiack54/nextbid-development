@@ -473,18 +473,32 @@ export function ClaudeTerminal({
             // Skip empty lines at start of buffer
             if (!trimmed && !responseBufferRef.current) continue;
 
-            // Skip obvious TUI noise
+            // Skip obvious TUI noise - aggressive filtering
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
-            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽]+$/.test(trimmed)) continue; // Spinners
+            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+$/.test(trimmed)) continue; // Spinners
+            if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue; // Horizontal separators (with whitespace)
+            if (/[─━═]{3,}/.test(trimmed) && trimmed.length < 50 && !/[a-zA-Z]{3,}/.test(trimmed)) continue; // Lines mostly dashes
             if (trimmed.startsWith('Try "') || trimmed.startsWith("Try '")) continue;
-            if (trimmed.includes('Thinking...') || trimmed.includes('Ideating...')) continue;
+            if (trimmed.includes('Thinking') || trimmed.includes('Ideating')) continue;
+            if (trimmed.includes('Thought for')) continue;
+            if (trimmed.includes('ctrl+o to show')) continue;
             if (trimmed.includes('Using tool:')) continue;
             if (trimmed.includes('(esc to interrupt)')) continue;
             if (trimmed.includes('for shortcuts')) continue;
-            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue; // Bare prompts
-            if (/^>\s*.{0,3}$/.test(trimmed)) continue; // Short prompt echoes
+            if (trimmed.startsWith('⎿')) continue; // Tip indicator
+            if (trimmed.includes('⎿')) continue; // Tip indicator anywhere
+            if (trimmed.includes('/passes')) continue;
             if (trimmed.includes('guest passes')) continue;
             if (trimmed.includes('queued messages')) continue;
+            if (trimmed.includes('that turn')) continue; // Tip box spam
+            if (trimmed.includes('Tip:')) continue; // Tip label
+            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue; // Bare prompts
+            if (/^>\s*.+/.test(trimmed)) continue; // All > prompt lines (user echo)
+            // Box drawing chars - filter if line is mostly box structure
+            if (/^[\s┌┐└┘├┤┬┴┼│─═║╔╗╚╝╠╣╦╩╬]+$/.test(trimmed)) continue; // Pure box chars
+            if ((trimmed.startsWith('┌') || trimmed.startsWith('└') || trimmed.startsWith('│') ||
+                 trimmed.startsWith('├') || trimmed.startsWith('╭') || trimmed.startsWith('╰')) &&
+                trimmed.length < 80 && !/[a-zA-Z]{5,}/.test(trimmed)) continue; // Box lines without much text
 
             // Pass everything else through (tables, emojis, code, etc.)
             responseBufferRef.current += line + '\n';
