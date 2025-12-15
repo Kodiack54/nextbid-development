@@ -624,7 +624,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                               <span className="text-white text-sm font-medium">{msg.user_name}</span>
                               <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
                             </div>
-                            <div className="text-gray-300 text-sm mt-0.5 break-words whitespace-pre-wrap">
+                            <div className="text-gray-300 text-sm mt-0.5 break-words whitespace-pre-wrap overflow-hidden" style={{ wordBreak: 'break-word' }}>
                               {/* Check if entire message is a box/banner - render as one block */}
                               {msg.content.includes('╭') && msg.content.includes('╯') ? (
                                 <pre className="font-mono text-xs text-cyan-400 whitespace-pre leading-tight">{msg.content}</pre>
@@ -652,8 +652,8 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                                 if (line.trim() === '') {
                                   return <div key={i} className="h-1" />;
                                 }
-                                // Regular text
-                                return <div key={i}>{line}</div>;
+                                // Regular text - ensure wrapping
+                                return <div key={i} className="break-words" style={{ wordBreak: 'break-word' }}>{line}</div>;
                               })}
                             </div>
                           </div>
