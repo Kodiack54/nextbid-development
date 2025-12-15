@@ -24,19 +24,28 @@ export function useSusanBriefing(projectPath: string) {
 
   const fetchSusanContext = useCallback(async (): Promise<SusanContext | null> => {
     setMemoryStatus('loading');
+    console.log('[useSusanBriefing] Fetching context from Susan...');
     try {
       const response = await fetch(
         `${SUSAN_URL}/api/context?project=${encodeURIComponent(projectPath)}`
       );
       if (response.ok) {
         const context = await response.json();
+        console.log('[useSusanBriefing] Context received:', {
+          hasGreeting: !!context?.greeting,
+          greetingLength: context?.greeting?.length || 0,
+          todos: context?.todos?.length || 0,
+          ports: context?.ports?.length || 0
+        });
         setSusanContext(context);
         susanContextRef.current = context;
         setMemoryStatus('loaded');
         return context;
+      } else {
+        console.log('[useSusanBriefing] Susan returned non-OK:', response.status);
       }
     } catch (err) {
-      console.log('[ClaudeTerminal] Susan not available:', err);
+      console.log('[useSusanBriefing] Susan not available:', err);
     }
     setMemoryStatus('error');
     return null;

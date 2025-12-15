@@ -78,6 +78,7 @@ export function ClaudeTerminal({
   const briefingSentToClaudeRef = useRef<boolean>(false);
   const showedReadyMessageRef = useRef<boolean>(false);
   const readyToShowMessagesRef = useRef<boolean>(false);
+  const claudeCodeLoadedRef = useRef<boolean>(false); // Track when Claude Code TUI is visible
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -262,10 +263,19 @@ export function ClaudeTerminal({
         }
       }, 2000);
 
-      // Fallback: If Susan briefing hasn't been sent after 12 seconds
+      // Fallback: If Susan briefing hasn't been sent after 25 seconds (but only if Claude loaded)
       setTimeout(() => {
         const ctx = susanContextRef.current;
-        if (!contextSentRef.current && ctx?.greeting && ws.readyState === WebSocket.OPEN) {
+        console.log('[ClaudeTerminal] Fallback check:', {
+          contextSent: contextSentRef.current,
+          claudeLoaded: claudeCodeLoadedRef.current,
+          hasContext: !!ctx,
+          hasGreeting: !!ctx?.greeting,
+          wsState: ws.readyState,
+          wsOpen: ws.readyState === WebSocket.OPEN
+        });
+        // Only send fallback if Claude Code TUI has actually loaded
+        if (!contextSentRef.current && ctx?.greeting && ws.readyState === WebSocket.OPEN && claudeCodeLoadedRef.current) {
           console.log('[ClaudeTerminal] Fallback timer: sending Susan briefing');
           contextSentRef.current = true;
           briefingSentToClaudeRef.current = true;
@@ -299,13 +309,35 @@ export function ClaudeTerminal({
 
           const cleanData = cleanAnsiCodes(msg.data);
 
+          // Detect when Claude Code TUI has loaded (not just bash)
+          if (!claudeCodeLoadedRef.current) {
+            const hasClaudeUI = cleanData.includes('Claude Code') ||
+                               cleanData.includes('Opus') ||
+                               cleanData.includes('What would you like') ||
+                               cleanData.includes('How can I help') ||
+                               cleanData.includes('❯');
+            if (hasClaudeUI) {
+              claudeCodeLoadedRef.current = true;
+              console.log('[ClaudeTerminal] Claude Code TUI detected');
+            }
+          }
+
           // Detect Claude ready and send Susan's briefing
           const currentContext = susanContextRef.current;
-          if (!contextSentRef.current && currentContext?.greeting) {
-            if (cleanData.length > 10) {
-              console.log('[ClaudeTerminal] Checking for ready prompt in:', cleanData.slice(-100));
-            }
 
+          // Log detection state periodically
+          if (!contextSentRef.current && cleanData.length > 10) {
+            console.log('[ClaudeTerminal] Detection state:', {
+              contextSent: contextSentRef.current,
+              claudeLoaded: claudeCodeLoadedRef.current,
+              hasContext: !!currentContext,
+              hasGreeting: !!currentContext?.greeting,
+              sample: cleanData.slice(-80)
+            });
+          }
+
+          // Only try to detect ready state if Claude Code TUI is loaded
+          if (!contextSentRef.current && currentContext?.greeting && claudeCodeLoadedRef.current) {
             const isClaudeReady = cleanData.includes('What would you like') ||
                                   cleanData.includes('How can I help') ||
                                   cleanData.includes('What can I help') ||
@@ -453,6 +485,7 @@ export function ClaudeTerminal({
     briefingSentToClaudeRef.current = false;
     showedReadyMessageRef.current = false;
     readyToShowMessagesRef.current = false;
+    claudeCodeLoadedRef.current = false;
     recentMessagesRef.current = [];
     responseBufferRef.current = '';
   }, [disconnectChad, resetSusan]);
