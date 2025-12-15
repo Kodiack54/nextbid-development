@@ -648,9 +648,9 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                                 if (line.startsWith('```') || line.startsWith('    ') || line.startsWith('\t')) {
                                   return <code key={i} className="block bg-gray-800 px-2 py-0.5 rounded text-xs font-mono text-green-400">{line.replace(/^```\w*/, '').replace(/```$/, '')}</code>;
                                 }
-                                // Empty lines become small spacing (not huge gaps)
+                                // Empty lines become visible spacing
                                 if (line.trim() === '') {
-                                  return <div key={i} className="h-1" />;
+                                  return <div key={i} className="h-4" />;
                                 }
                                 // Regular text - ensure wrapping
                                 return <div key={i} className="break-words" style={{ wordBreak: 'break-word' }}>{line}</div>;

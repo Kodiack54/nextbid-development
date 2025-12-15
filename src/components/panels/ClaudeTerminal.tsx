@@ -105,6 +105,7 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSentMessageRef = useRef<string>('');
   const recentMessagesRef = useRef<Set<string>>(new Set()); // Track recent message signatures
+  const recentUserInputsRef = useRef<Set<string>>(new Set()); // Track recent user inputs to filter echo
   const susanBriefingSentRef = useRef<boolean>(false); // Session-level Susan briefing tracking
   const inSusanBriefingRef = useRef<boolean>(false); // Track if currently inside a briefing block
 
@@ -130,6 +131,20 @@ export function ClaudeTerminal({
           created_at: new Date().toISOString(),
         });
       }
+
+      // Track user input to filter echo from terminal output
+      // Store multiple fragments to catch partial echoes
+      const words = message.split(/\s+/).filter(w => w.length > 3);
+      words.slice(0, 5).forEach(word => {
+        recentUserInputsRef.current.add(word.toLowerCase());
+      });
+      // Also add the first ~50 chars as a signature
+      recentUserInputsRef.current.add(message.slice(0, 50).toLowerCase());
+      // Auto-expire after 10 seconds
+      setTimeout(() => {
+        words.slice(0, 5).forEach(word => recentUserInputsRef.current.delete(word.toLowerCase()));
+        recentUserInputsRef.current.delete(message.slice(0, 50).toLowerCase());
+      }, 10000);
     }
   }, [onConversationMessage]);
 
@@ -541,6 +556,22 @@ export function ClaudeTerminal({
             if (trimmedLine.includes('… +') && trimmedLine.includes('lines')) continue; // Truncation indicator
             // - Token/timing status
             if (/↓\s*[\d.]+k?\s*tokens/.test(trimmedLine)) continue; // Token count indicators
+
+            // Filter echoed user input (terminal echoes what you type)
+            const lineLower = trimmedLine.toLowerCase();
+            const lineFirst50 = lineLower.slice(0, 50);
+            // Check if this line matches any recent user input signature or contains tracked words
+            if (recentUserInputsRef.current.has(lineFirst50)) continue;
+            // Check for word matches (helps catch partial echoes)
+            let isUserEcho = false;
+            for (const trackedWord of recentUserInputsRef.current) {
+              // Only match substantial words (4+ chars) to avoid false positives
+              if (trackedWord.length >= 4 && lineLower.includes(trackedWord)) {
+                isUserEcho = true;
+                break;
+              }
+            }
+            if (isUserEcho) continue;
 
             // Everything else goes through - INCLUDING box drawing!
             // Preserve original indentation (use line, not trimmedLine)
