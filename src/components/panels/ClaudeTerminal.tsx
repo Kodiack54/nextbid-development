@@ -395,6 +395,11 @@ export function ClaudeTerminal({
           for (const line of lines) {
             const trimmedLine = line.trim();
 
+            // Skip user input echoes (lines starting with > or ❯)
+            if (trimmedLine.startsWith('>') || trimmedLine.startsWith('❯')) {
+              continue;
+            }
+
             // Bullet points (● prefix indicates Claude speaking)
             if (trimmedLine.startsWith('●')) {
               const content = trimmedLine.replace(/^●\s*/, '').trim();
@@ -402,8 +407,8 @@ export function ClaudeTerminal({
                 responseBufferRef.current += content + '\n';
               }
             }
-            // Questions (lines ending with ?)
-            else if (trimmedLine.endsWith('?') && trimmedLine.length > 10) {
+            // Questions (lines ending with ?) - but not short prompts
+            else if (trimmedLine.endsWith('?') && trimmedLine.length > 20) {
               responseBufferRef.current += trimmedLine + '\n';
             }
             // Numbered options (1. or 1) style)
