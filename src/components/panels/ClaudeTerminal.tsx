@@ -94,6 +94,7 @@ export function ClaudeTerminal({
   const [inputValue, setInputValue] = useState('');
   const [memoryStatus, setMemoryStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [susanContext, setSusanContext] = useState<SusanContext | null>(null);
+  const susanContextRef = useRef<SusanContext | null>(null); // Ref for WebSocket closure access
 
   // Response buffering for better message parsing
   const responseBufferRef = useRef<string>('');
@@ -237,6 +238,7 @@ export function ClaudeTerminal({
       if (response.ok) {
         const context = await response.json();
         setSusanContext(context);
+        susanContextRef.current = context; // Store in ref for WebSocket closure
         setMemoryStatus('loaded');
         return context;
       }
@@ -352,7 +354,8 @@ export function ClaudeTerminal({
 
           // Detect when Claude is ready and send Susan's memory briefing
           // Look for Claude's ready prompts: >, ❯, "What would you like", "How can I help"
-          if (!contextSentRef.current && susanContext?.greeting) {
+          const currentContext = susanContextRef.current; // Use ref to access latest context
+          if (!contextSentRef.current && currentContext?.greeting) {
             const isClaudeReady = cleanData.includes('>') ||
                                   cleanData.includes('❯') ||
                                   cleanData.includes('What would you like') ||
@@ -369,12 +372,12 @@ export function ClaudeTerminal({
 
               // Wait a moment then send the full context
               setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  const contextMessage = buildContextPrompt(susanContext);
-                  ws.send(JSON.stringify({ type: 'input', data: contextMessage }));
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  const contextMessage = buildContextPrompt(currentContext);
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
                   setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                      ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
                     }
                   }, 100);
                 }
