@@ -432,48 +432,25 @@ export function ClaudeTerminal({
             }
           }
 
-          // Buffer response text for debounced parsing
-          // Capture Claude's responses more permissively
+          // Buffer ALL response text - minimal filtering
+          // Chad gets raw data via sendToChad() for full logging
           const lines = cleanData.split(/[\r\n]+/);
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Skip empty lines and short noise
-            if (trimmedLine.length < 3) continue;
+            // Only skip these (true noise):
+            // - Empty lines at very start
+            if (trimmedLine.length === 0 && responseBufferRef.current.length === 0) continue;
+            // - Shell prompts
+            if (trimmedLine === '$' || trimmedLine === '%' || trimmedLine === '>') continue;
+            if (trimmedLine.startsWith('❯')) continue;
+            // - Spinner/progress indicators only
+            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+$/.test(trimmedLine)) continue;
 
-            // Skip user input echoes and prompts
-            if (trimmedLine.startsWith('>') || trimmedLine.startsWith('❯')) continue;
-            if (trimmedLine === '$' || trimmedLine === '%') continue;
-
-            // Skip obvious system/tool output
-            if (trimmedLine.startsWith('curl ') || trimmedLine.startsWith('npm ')) continue;
-            if (trimmedLine.includes('node_modules')) continue;
-
-            // Bullet points (● prefix indicates Claude speaking)
-            if (trimmedLine.startsWith('●')) {
-              const content = trimmedLine.replace(/^●\s*/, '').trim();
-              if (content.length > 5) {
-                responseBufferRef.current += content + '\n';
-              }
-            }
-            // Dash bullets (- prefix, common in Claude responses)
-            else if (trimmedLine.startsWith('- ') && trimmedLine.length > 10) {
-              responseBufferRef.current += trimmedLine + '\n';
-            }
-            // Numbered options (1. or 1) or 1: style)
-            else if (/^\d+[.)\]:\-]\s*.+/.test(trimmedLine) && trimmedLine.length > 5) {
-              responseBufferRef.current += trimmedLine + '\n';
-            }
-            // Lettered options (a. or a) style)
-            else if (/^[a-zA-Z][.)\]]\s+.+/.test(trimmedLine) && trimmedLine.length > 5) {
-              responseBufferRef.current += trimmedLine + '\n';
-            }
-            // Questions (lines containing ?) - capture full context
-            else if (trimmedLine.includes('?') && trimmedLine.length > 15) {
-              responseBufferRef.current += trimmedLine + '\n';
-            }
-            // Substantial text lines (likely Claude's explanations)
-            else if (trimmedLine.length > 50 && !trimmedLine.includes('│') && !trimmedLine.includes('├')) {
+            // Everything else goes through - INCLUDING box drawing!
+            if (trimmedLine.length === 0) {
+              responseBufferRef.current += '\n';
+            } else {
               responseBufferRef.current += trimmedLine + '\n';
             }
           }
@@ -535,7 +512,7 @@ export function ClaudeTerminal({
               clearTimeout(debounceTimerRef.current);
             }
 
-            debounceTimerRef.current = setTimeout(sendBufferedContent, 3000); // Wait 3s for full response
+            debounceTimerRef.current = setTimeout(sendBufferedContent, 5000); // Wait 5s for full response to reduce spam
           }
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
@@ -722,10 +699,70 @@ export function ClaudeTerminal({
             ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onPaste={(e) => {
+              // Get pasted text and update state immediately
+              const pastedText = e.clipboardData.getData('text');
+              const target = e.target as HTMLTextAreaElement;
+              const start = target.selectionStart;
+              const end = target.selectionEnd;
+              const newValue = inputValue.slice(0, start) + pastedText + inputValue.slice(end);
+              setInputValue(newValue);
+              e.preventDefault();
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendInput();
+                // Use the textarea's current value directly to avoid state timing issues
+                const currentValue = (e.target as HTMLTextAreaElement).value;
+                if (currentValue.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+                  // Send the value directly
+                  const text = currentValue.trim();
+                  if (text.length > 1000) {
+                    // Chunk long input
+                    const chunks: string[] = [];
+                    for (let i = 0; i < text.length; i += 1000) {
+                      chunks.push(text.slice(i, i + 1000));
+                    }
+                    let chunkIndex = 0;
+                    const sendNextChunk = () => {
+                      if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
+                        chunkIndex++;
+                        if (chunkIndex < chunks.length) {
+                          setTimeout(sendNextChunk, 50);
+                        } else {
+                          setTimeout(() => {
+                            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                            }
+                          }, 100);
+                        }
+                      }
+                    };
+                    sendNextChunk();
+                  } else {
+                    wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+                    setTimeout(() => {
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                      }
+                    }, 50);
+                  }
+                  // Log to conversation
+                  if (onConversationMessage) {
+                    onConversationMessage({
+                      id: `user-${Date.now()}`,
+                      user_id: 'me',
+                      user_name: 'You',
+                      content: text.length > 500 ? text.slice(0, 500) + `... (${text.length} chars)` : text,
+                      created_at: new Date().toISOString(),
+                    });
+                  }
+                  setInputValue('');
+                } else if (!currentValue.trim()) {
+                  // Empty input - just send Enter for confirmations
+                  wsRef.current?.send(JSON.stringify({ type: 'input', data: '\r' }));
+                }
               } else if (e.key === 'Escape') {
                 // Send Escape character for TUI navigation
                 if (wsRef.current?.readyState === WebSocket.OPEN) {

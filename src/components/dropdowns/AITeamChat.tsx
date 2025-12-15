@@ -624,9 +624,35 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                               <span className="text-white text-sm font-medium">{msg.user_name}</span>
                               <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
                             </div>
-                            <p className="text-gray-300 text-sm mt-0.5 break-words">
-                              {msg.content}
-                            </p>
+                            <div className="text-gray-300 text-sm mt-0.5 break-words whitespace-pre-wrap">
+                              {msg.content.split('\n').map((line, i) => {
+                                // Handle box-drawing / ASCII art (render in monospace)
+                                if (/[│├└┌┐┘┬┴┼─═║╔╗╚╝╠╣╦╩╬┃┏┓┗┛┣┫┳┻╋]/.test(line)) {
+                                  return <pre key={i} className="font-mono text-xs text-cyan-400 whitespace-pre">{line}</pre>;
+                                }
+                                // Handle bullet points
+                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ') || line.trim().startsWith('● ')) {
+                                  return <div key={i} className="ml-2 flex gap-1"><span className="text-gray-500">•</span><span>{line.replace(/^[\s]*[-•●]\s*/, '')}</span></div>;
+                                }
+                                // Handle numbered items
+                                if (/^\s*\d+[.)]\s/.test(line)) {
+                                  const match = line.match(/^(\s*)(\d+[.)])\s*(.*)$/);
+                                  if (match) {
+                                    return <div key={i} className="ml-2 flex gap-1"><span className="text-blue-400 font-medium">{match[2]}</span><span>{match[3]}</span></div>;
+                                  }
+                                }
+                                // Handle code blocks (lines starting with spaces/tabs or backticks)
+                                if (line.startsWith('```') || line.startsWith('    ') || line.startsWith('\t')) {
+                                  return <code key={i} className="block bg-gray-800 px-2 py-0.5 rounded text-xs font-mono text-green-400">{line.replace(/^```\w*/, '').replace(/```$/, '')}</code>;
+                                }
+                                // Empty lines become spacing
+                                if (line.trim() === '') {
+                                  return <div key={i} className="h-2" />;
+                                }
+                                // Regular text
+                                return <div key={i}>{line}</div>;
+                              })}
+                            </div>
                           </div>
                         </div>
                       );
