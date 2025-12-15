@@ -499,11 +499,13 @@ export function ClaudeTerminal({
             if (trimmedLine === 'that turn' || trimmedLine.includes('that turn')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
-            // - Status lines (Ideating, Thinking, shortcuts hints)
-            if (/^[·✢✶✻✽*•∴]?\s*(Ideating|Thinking|Thought)/.test(trimmedLine)) continue;
+            // - Status lines (Ideating, Thinking, Unfurling, shortcuts hints)
+            if (/^[·✢✶✻✽*•∴]?\s*(Ideating|Thinking|Thought|Unfurling)/.test(trimmedLine)) continue;
             if (trimmedLine.includes('(esc to interrupt)')) continue;
+            if (trimmedLine.includes('esc to interrupt')) continue; // Without parens
             if (trimmedLine.includes('for shortcuts')) continue;
             if (trimmedLine.includes('ctrl+o to show')) continue;
+            if (trimmedLine.includes('ctrl+o to expand')) continue; // Expand hint
             if (trimmedLine.includes('ctrl-g to edit')) continue;
             // - Claude Code UI chrome
             if (trimmedLine.startsWith('Try "')) continue;
@@ -512,10 +514,20 @@ export function ClaudeTerminal({
             if (trimmedLine === '?' || trimmedLine === '? ') continue;
             // NOTE: Welcome banner, boxes, and ASCII art are ALLOWED through
             // Only filtering actual TUI spam that repeats 50+ times
-            // - TUI separator lines (ONLY dashes, no corners) - but allow box lines with corners
-            if (/^[─━═]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure separator spam
+            // - TUI separator lines - horizontal lines made of box-drawing chars
+            // Check for repeated dash/line characters (various Unicode variants)
+            if (/^[─━═\-]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Pure separator spam
+            if (/^[\u2500-\u257F]+$/.test(trimmedLine) && trimmedLine.length > 5) continue; // Unicode box drawing range
             // - Empty standalone bullet markers (not part of content)
             if (trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') continue;
+            // - Tool call status lines (● Search, ● Bash, ● Read, etc.)
+            if (/^●?\s*(Search|Bash|Read|Write|Edit|Glob|Grep|Task)\s*\(/.test(trimmedLine)) continue;
+            // - Tool output noise
+            if (trimmedLine.startsWith('drwxr-xr-x')) continue; // ls -la output
+            if (trimmedLine.startsWith('-rw-r--r--')) continue; // ls -la files
+            if (trimmedLine.includes('… +') && trimmedLine.includes('lines')) continue; // Truncation indicator
+            // - Token/timing status
+            if (/↓\s*[\d.]+k?\s*tokens/.test(trimmedLine)) continue; // Token count indicators
 
             // Everything else goes through - INCLUDING box drawing!
             // Preserve original indentation (use line, not trimmedLine)
