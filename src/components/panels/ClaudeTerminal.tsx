@@ -104,6 +104,7 @@ export function ClaudeTerminal({
   const lastMessageTimeRef = useRef<number>(0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSentMessageRef = useRef<string>('');
+  const recentMessagesRef = useRef<Set<string>>(new Set()); // Track recent message signatures
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -446,13 +447,16 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('❯')) continue;
             // - User input echo (lines starting with > followed by text)
             if (trimmedLine.startsWith('> ') && !trimmedLine.startsWith('> ===')) continue;
-            // - TUI instruction lines
+            // - TUI instruction/tip lines
             if (trimmedLine.includes('Enter to select')) continue;
             if (trimmedLine.includes('Tab/Arrow keys')) continue;
             if (trimmedLine.includes('Esc to cancel')) continue;
             if (trimmedLine.includes('to navigate')) continue;
             if (trimmedLine.includes('Press up to edit')) continue;
             if (trimmedLine.includes('queued messages')) continue;
+            if (trimmedLine.startsWith('⎿')) continue; // Tip indicator
+            if (trimmedLine.includes('Tip: Run /')) continue;
+            if (trimmedLine.includes('/install-github-app')) continue;
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -490,13 +494,20 @@ export function ClaudeTerminal({
 
             // Only send if we have meaningful content
             if (bufferedContent.length > 10) {
-              // Skip if too similar to last message (check first 100 chars to catch partial dupes)
-              const contentStart = bufferedContent.slice(0, 100);
-              const lastStart = lastSentMessageRef.current.slice(0, 100);
-              if (contentStart === lastStart) {
+              // Create signature from first 50 chars (for dedup)
+              const signature = bufferedContent.slice(0, 50);
+
+              // Skip if we've seen this signature recently
+              if (recentMessagesRef.current.has(signature)) {
                 responseBufferRef.current = '';
                 return;
               }
+
+              // Add to recent set and auto-expire after 10 seconds
+              recentMessagesRef.current.add(signature);
+              setTimeout(() => {
+                recentMessagesRef.current.delete(signature);
+              }, 10000);
 
               // Skip only actual command execution output (not grids Claude intentionally shows)
               const isToolOutput = bufferedContent.includes('curl ') ||
