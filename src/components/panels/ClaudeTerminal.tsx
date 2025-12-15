@@ -583,6 +583,7 @@ export function ClaudeTerminal({
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
 
             // FILTER Susan's briefing content - don't show in chat (it's visible in terminal)
+            // This includes the briefing itself AND the echo when it's sent to Claude
             if (trimmed.includes('LAST SESSION') ||
                 trimmed.includes('RECENT CONVERSATION') ||
                 trimmed.includes('KEY KNOWLEDGE') ||
@@ -590,11 +591,27 @@ export function ClaudeTerminal({
                 trimmed.includes("I've gathered") ||
                 trimmed.includes('Ready to continue') ||
                 trimmed.includes("What's the priority") ||
-                /^[⏰💬🧠📋]/.test(trimmed)) continue;
+                trimmed.includes('Summary:') ||
+                trimmed.startsWith('You:') ||
+                trimmed.startsWith('Claude:') ||
+                // Susan's knowledge category tags like [ug-fix], [rchitecture], [onfig]
+                /^\s*\w*-?\w*\]/.test(trimmed) ||
+                /\[[\w-]+\]/.test(trimmed) ||
+                // Briefing emojis
+                /^[⏰💬🧠📋]/.test(trimmed) ||
+                // Partial escape codes that leak through
+                /^\[\d+/.test(trimmed) ||
+                trimmed === 'm' ||
+                trimmed === 'claude') continue;
 
             // Spinners and thinking indicators
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+/.test(trimmed)) continue; // Lines starting with spinners
             if (/Flibbertigibbet|Cogitating|Ruminating|Pondering|Cerebrating/i.test(trimmed)) continue; // Claude's thinking words
+
+            // Claude Code help/info text that gets spammed
+            if (trimmed.includes('.claude/commands/')) continue;
+            if (trimmed.includes('commands that work in any project')) continue;
+            if (trimmed.includes('~/.claude/')) continue;
             if (trimmed.includes('esc to interrupt') || trimmed.includes('to interrupt)')) continue;
             // Horizontal separators
             if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue;
@@ -646,7 +663,16 @@ export function ClaudeTerminal({
             if (content.includes('LAST SESSION') ||
                 content.includes('END BRIEFING') ||
                 content.includes("I've gathered") ||
-                content.includes('Hey Claude,')) {
+                content.includes('Hey Claude,') ||
+                content.includes('Summary:') ||
+                content.includes('RECENT CONVERSATION') ||
+                content.includes('KEY KNOWLEDGE') ||
+                // Multiple "You:" entries is definitely briefing echo
+                (content.match(/You:/g) || []).length > 1 ||
+                // Susan's knowledge tags
+                content.includes('ug-fix]') ||
+                content.includes('rchitecture]') ||
+                content.includes('onfig]')) {
               responseBufferRef.current = '';
               return;
             }
@@ -655,7 +681,9 @@ export function ClaudeTerminal({
             if (content.includes('Dev Studio Terminal') ||
                 content.includes('Type \'claude\'') ||
                 content.includes('root@') ||
-                content.includes('Connected to')) {
+                content.includes('Connected to') ||
+                content.includes('.claude/commands/') ||
+                content.includes('commands that work in any project')) {
               responseBufferRef.current = '';
               return;
             }
