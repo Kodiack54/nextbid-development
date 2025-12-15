@@ -578,7 +578,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
               ) : (
                 <>
                   {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
                     {messages.length === 0 && (
                       <div className="text-center text-gray-500 py-8">
                         <div className="text-3xl mb-2">
@@ -600,7 +600,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                     {messages.map(msg => {
                       const isUser = msg.user_id === 'me' || msg.user_id === userId;
                       return (
-                        <div key={msg.id} className="flex gap-3">
+                        <div key={msg.id} className="flex gap-3 overflow-hidden">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
                             isUser
                               ? 'bg-gray-600'
@@ -624,7 +624,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                               <span className="text-white text-sm font-medium">{msg.user_name}</span>
                               <span className="text-gray-500 text-xs">{formatTime(msg.created_at)}</span>
                             </div>
-                            <div className="text-gray-300 text-sm mt-0.5 break-words whitespace-pre-wrap overflow-hidden" style={{ wordBreak: 'break-word' }}>
+                            <div className="text-gray-300 text-sm mt-0.5 break-all overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
                               {/* Check if entire message is a box/banner - render as one block */}
                               {msg.content.includes('╭') && msg.content.includes('╯') ? (
                                 <pre className="font-mono text-xs text-cyan-400 whitespace-pre leading-tight">{msg.content}</pre>
