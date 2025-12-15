@@ -108,6 +108,7 @@ export function ClaudeTerminal({
   const lastMessageTimeRef = useRef<number>(0);
   const briefingSentToClaudeRef = useRef<boolean>(false); // Track if briefing was actually sent to Claude
   const showedReadyMessageRef = useRef<boolean>(false); // Track if we showed "Ready to work!"
+  const readyToShowMessagesRef = useRef<boolean>(false); // Delay before showing messages after briefing
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -443,6 +444,11 @@ export function ClaudeTerminal({
                 }
               }, delay);
             });
+            // Wait 5 seconds for all echo spam to clear before showing chat messages
+            setTimeout(() => {
+              readyToShowMessagesRef.current = true;
+              console.log('[ClaudeTerminal] Ready to show chat messages (fallback)');
+            }, 5000);
           };
 
           // Send in chunks
@@ -481,6 +487,8 @@ export function ClaudeTerminal({
         if (msg.type === 'output' && xtermRef.current) {
           // Write directly to xterm - it handles all escape codes natively!
           xtermRef.current.write(msg.data);
+          // Auto-scroll to bottom
+          xtermRef.current.scrollToBottom();
 
           // Forward to Chad for transcription
           sendToChad(msg.data);
@@ -545,6 +553,11 @@ export function ClaudeTerminal({
                         }
                       }, delay);
                     });
+                    // Wait 5 seconds for all echo spam to clear before showing chat messages
+                    setTimeout(() => {
+                      readyToShowMessagesRef.current = true;
+                      console.log('[ClaudeTerminal] Ready to show chat messages');
+                    }, 5000);
                   };
 
                   // Send the message in chunks if it's long
@@ -617,6 +630,25 @@ export function ClaudeTerminal({
             if (trimmed.includes('.claude/commands/')) continue;
             if (trimmed.includes('commands that work in any project')) continue;
             if (trimmed.includes('~/.claude/')) continue;
+
+            // Tool output and TUI prompts
+            if (trimmed.includes('tool uses')) continue;
+            if (trimmed.includes('ctrl+o to')) continue;
+            if (trimmed.includes('ctrl+b to')) continue;
+            if (trimmed.includes('Do you want to proceed')) continue;
+            if (trimmed.includes('Esc to cancel')) continue;
+            if (trimmed.includes('MCP tools')) continue;
+            if (trimmed.startsWith('Explore(')) continue;
+            if (trimmed.startsWith('Read ') && trimmed.includes(' lines')) continue;
+            if (/^\+\d+ more/.test(trimmed)) continue;
+            if (/^❯\s*\d+\./.test(trimmed)) continue; // Menu options like "❯ 1. Yes"
+            if (trimmed === '1. Yes' || trimmed === '2. Yes,' || trimmed.startsWith('3. Type here')) continue;
+
+            // Session-specific content that's being echoed
+            if (trimmed.includes('conduct a series of message-sending tests')) continue;
+            if (trimmed.includes('terminal-to-chat API')) continue;
+            if (trimmed.includes('Bash command')) continue;
+            if (trimmed.includes('find /var/www')) continue;
             if (trimmed.includes('esc to interrupt') || trimmed.includes('to interrupt)')) continue;
             // Horizontal separators
             if (/^[\s─━═\-─━┄┅┈┉╌╍]+$/.test(trimmed)) continue;
@@ -715,7 +747,13 @@ export function ClaudeTerminal({
               lastMessageTimeRef.current = now;
 
               if (onConversationMessage) {
-                // Only show "Ready to work!" AFTER briefing was sent AND this is Claude's response
+                // Wait until briefing spam has cleared before showing any messages
+                if (!readyToShowMessagesRef.current) {
+                  responseBufferRef.current = '';
+                  return;
+                }
+
+                // Only show "Ready to work!" AFTER briefing was sent AND spam has cleared
                 if (briefingSentToClaudeRef.current && !showedReadyMessageRef.current) {
                   showedReadyMessageRef.current = true;
                   onConversationMessage({
@@ -781,6 +819,7 @@ export function ClaudeTerminal({
     // Reset chat state for next session
     briefingSentToClaudeRef.current = false;
     showedReadyMessageRef.current = false;
+    readyToShowMessagesRef.current = false;
     recentMessagesRef.current = [];
     responseBufferRef.current = '';
   }, []);
@@ -1005,6 +1044,26 @@ export function ClaudeTerminal({
                 // Send Escape character for TUI navigation
                 if (wsRef.current?.readyState === WebSocket.OPEN) {
                   wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b' }));
+                }
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[A' }));
+                }
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[B' }));
+                }
+              } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[C' }));
+                }
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[D' }));
                 }
               }
             }}
