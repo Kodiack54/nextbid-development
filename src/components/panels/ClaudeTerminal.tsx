@@ -106,7 +106,7 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recentMessagesRef = useRef<string[]>([]); // Last few messages for dedup
   const lastMessageTimeRef = useRef<number>(0);
-  const briefingSentRef = useRef<boolean>(false); // Track if Susan's briefing was sent
+  const waitingForReadyRef = useRef<boolean>(false); // Track if waiting for Claude's first response after briefing
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -364,6 +364,18 @@ export function ClaudeTerminal({
       setConnected(true);
       setConnecting(false);
 
+      // Show "gathering thoughts" message in chat immediately
+      if (onConversationMessage) {
+        onConversationMessage({
+          id: `claude-${Date.now()}`,
+          user_id: 'claude',
+          user_name: 'Claude',
+          content: 'Be right there, gathering my thoughts... 🧠',
+          created_at: new Date().toISOString(),
+        });
+      }
+      waitingForReadyRef.current = true;
+
       if (xtermRef.current) {
         xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
         xtermRef.current.writeln('');
@@ -435,17 +447,23 @@ export function ClaudeTerminal({
             .trim();
 
           // Detect when Claude is ready and send Susan's memory briefing
-          // Look for Claude's ready prompts: >, ❯, "What would you like", "How can I help"
-          const currentContext = susanContextRef.current; // Use ref to access latest context
+          const currentContext = susanContextRef.current;
           if (!contextSentRef.current && currentContext?.greeting) {
-            const isClaudeReady = cleanData.includes('>') ||
-                                  cleanData.includes('❯') ||
+            // Look for Claude's ready indicators - be more flexible
+            const isClaudeReady = cleanData.includes('❯') ||
                                   cleanData.includes('What would you like') ||
                                   cleanData.includes('How can I help') ||
-                                  cleanData.includes('ready to help');
+                                  cleanData.includes('ready to help') ||
+                                  cleanData.includes('work on') ||
+                                  cleanData.includes('assist') ||
+                                  // After welcome screen loads
+                                  (cleanData.includes('Claude Code') && cleanData.includes('Welcome')) ||
+                                  // Generic prompt at end of line
+                                  /[>\$❯]\s*$/.test(cleanData);
 
             if (isClaudeReady) {
               contextSentRef.current = true;
+              console.log('[ClaudeTerminal] Detected Claude ready, sending Susan briefing');
 
               // Show briefing status in terminal
               if (xtermRef.current) {
@@ -456,6 +474,7 @@ export function ClaudeTerminal({
               setTimeout(() => {
                 if (wsRef.current?.readyState === WebSocket.OPEN) {
                   const contextMessage = buildContextPrompt(currentContext);
+                  console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
                   wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
                   setTimeout(() => {
                     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -463,7 +482,7 @@ export function ClaudeTerminal({
                     }
                   }, 100);
                 }
-              }, 1000); // Give Claude a second to fully render
+              }, 1500); // Give Claude more time to fully render
             }
           }
 
@@ -478,22 +497,15 @@ export function ClaudeTerminal({
             // Skip obvious TUI noise - aggressive filtering
             if (!trimmed) { responseBufferRef.current += '\n'; continue; }
 
-            // ALLOW-LIST: Susan's briefing content - always let through
-            const isBriefingContent = trimmed.includes('LAST SESSION') ||
-                                      trimmed.includes('RECENT CONVERSATION') ||
-                                      trimmed.includes('KEY KNOWLEDGE') ||
-                                      trimmed.includes('END BRIEFING') ||
-                                      trimmed.includes("I've gathered") ||
-                                      trimmed.includes('Summary:') ||
-                                      trimmed.includes('Ready to continue') ||
-                                      trimmed.includes("What's the priority") ||
-                                      trimmed.startsWith('You:') ||
-                                      trimmed.startsWith('Claude:') ||
-                                      /^[⏰💬🧠📋]/.test(trimmed); // Briefing emojis
-            if (isBriefingContent) {
-              responseBufferRef.current += line + '\n';
-              continue;
-            }
+            // FILTER Susan's briefing content - don't show in chat (it's visible in terminal)
+            if (trimmed.includes('LAST SESSION') ||
+                trimmed.includes('RECENT CONVERSATION') ||
+                trimmed.includes('KEY KNOWLEDGE') ||
+                trimmed.includes('END BRIEFING') ||
+                trimmed.includes("I've gathered") ||
+                trimmed.includes('Ready to continue') ||
+                trimmed.includes("What's the priority") ||
+                /^[⏰💬🧠📋]/.test(trimmed)) continue;
 
             // Spinners and thinking indicators
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽∴]+/.test(trimmed)) continue; // Lines starting with spinners
@@ -537,64 +549,64 @@ export function ClaudeTerminal({
           // Debounce: send buffered content after output settles
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
           debounceTimerRef.current = setTimeout(() => {
-            let content = responseBufferRef.current.trim();
-            if (content.length > 10) {
-              // Check if this is Susan's briefing
-              const isBriefing = content.includes('LAST SESSION') ||
-                                 content.includes('END BRIEFING') ||
-                                 content.includes("I've gathered");
+            const content = responseBufferRef.current.trim();
 
-              if (isBriefing) {
-                // Already sent briefing this session? Skip entirely
-                if (briefingSentRef.current) {
-                  responseBufferRef.current = '';
-                  return;
-                }
-                briefingSentRef.current = true;
+            // Skip if no meaningful content
+            if (content.length < 20) {
+              responseBufferRef.current = '';
+              return;
+            }
 
-                // Extract just ONE copy of the briefing (TUI redraws cause duplicates in buffer)
-                const endMarker = '=== END BRIEFING ===';
-                const firstEnd = content.indexOf(endMarker);
-                if (firstEnd !== -1) {
-                  // Find the start of this briefing
-                  const startMarker = "Hey Claude, I've gathered";
-                  let startIdx = content.lastIndexOf(startMarker, firstEnd);
-                  if (startIdx === -1) startIdx = 0;
-                  content = content.slice(startIdx, firstEnd + endMarker.length).trim();
-                }
+            // Skip Susan's briefing content entirely (it's in the terminal, not chat)
+            if (content.includes('LAST SESSION') ||
+                content.includes('END BRIEFING') ||
+                content.includes("I've gathered")) {
+              responseBufferRef.current = '';
+              return;
+            }
+
+            // Robust deduplication
+            const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
+            const isDuplicate = recentMessagesRef.current.some(recent => {
+              const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
+              if (normalizedContent === normalizedRecent) return true;
+              const sig1 = normalizedContent.slice(0, 50);
+              const sig2 = normalizedRecent.slice(0, 50);
+              if (sig1 === sig2) return true;
+              return false;
+            });
+
+            const now = Date.now();
+            const tooSoon = now - lastMessageTimeRef.current < 1500;
+
+            if (!isDuplicate && !tooSoon) {
+              recentMessagesRef.current.push(content);
+              if (recentMessagesRef.current.length > 10) {
+                recentMessagesRef.current.shift();
               }
+              lastMessageTimeRef.current = now;
 
-              // Robust deduplication - check against recent messages
-              const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
-              const isDuplicate = recentMessagesRef.current.some(recent => {
-                const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
-                if (normalizedContent === normalizedRecent) return true;
-                const sig1 = normalizedContent.slice(0, 50);
-                const sig2 = normalizedRecent.slice(0, 50);
-                if (sig1 === sig2) return true;
-                return false;
-              });
-
-              // Also check timing - don't send if last message was < 1.5 seconds ago
-              const now = Date.now();
-              const tooSoon = now - lastMessageTimeRef.current < 1500;
-
-              if (!isDuplicate && !tooSoon) {
-                recentMessagesRef.current.push(content);
-                if (recentMessagesRef.current.length > 10) {
-                  recentMessagesRef.current.shift();
-                }
-                lastMessageTimeRef.current = now;
-
-                if (onConversationMessage) {
+              if (onConversationMessage) {
+                // If this is Claude's first real response, show "Ready to Work!" first
+                if (waitingForReadyRef.current) {
+                  waitingForReadyRef.current = false;
                   onConversationMessage({
-                    id: `claude-${Date.now()}`,
+                    id: `claude-ready-${Date.now()}`,
                     user_id: 'claude',
                     user_name: 'Claude',
-                    content: content,
+                    content: "Ready to work! Let's go! 🚀",
                     created_at: new Date().toISOString(),
                   });
                 }
+
+                // Then show the actual response
+                onConversationMessage({
+                  id: `claude-${Date.now()}`,
+                  user_id: 'claude',
+                  user_name: 'Claude',
+                  content: content,
+                  created_at: new Date().toISOString(),
+                });
               }
             }
             responseBufferRef.current = '';
@@ -639,7 +651,7 @@ export function ClaudeTerminal({
     setMemoryStatus('idle');
     setSusanContext(null);
     // Reset chat state for next session
-    briefingSentRef.current = false;
+    waitingForReadyRef.current = false;
     recentMessagesRef.current = [];
     responseBufferRef.current = '';
   }, []);
