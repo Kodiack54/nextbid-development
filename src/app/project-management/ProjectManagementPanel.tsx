@@ -194,35 +194,71 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
           <p>No projects yet</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto space-y-1">
+        <div className="flex-1 overflow-auto space-y-2">
           {projects.map(project => (
             <div
               key={project.id}
               onClick={() => handleSelectProject(project)}
-              className="flex items-center justify-between p-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500 rounded cursor-pointer group transition-colors"
+              className="p-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500 rounded cursor-pointer group transition-colors"
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-start gap-3">
                 {/* Logo/Initial */}
                 {project.logo_url ? (
-                  <img src={project.logo_url} alt="" className="w-8 h-8 rounded object-cover" />
+                  <img src={project.logo_url} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-8 h-8 rounded bg-blue-600/20 flex items-center justify-center text-blue-400 text-sm font-bold flex-shrink-0">
+                  <div className="w-10 h-10 rounded bg-blue-600/20 flex items-center justify-center text-blue-400 font-bold flex-shrink-0">
                     {project.name.charAt(0).toUpperCase()}
                   </div>
                 )}
 
-                {/* Info */}
-                <div className="min-w-0">
-                  <div className="text-white font-medium text-sm truncate">{project.name}</div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    {project.droplet_name && <span>{project.droplet_name}</span>}
-                    {project.port_dev && <span className="text-blue-400">:{project.port_dev}</span>}
+                {/* Main Info */}
+                <div className="flex-1 min-w-0">
+                  {/* Name & Description */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium">{project.name}</span>
+                    <span className="text-gray-600 text-xs">({project.slug})</span>
+                    <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-blue-400 ml-auto flex-shrink-0" />
+                  </div>
+                  {project.description && (
+                    <p className="text-gray-400 text-sm mt-0.5 truncate">{project.description}</p>
+                  )}
+
+                  {/* At-a-glance Info Row */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                    {/* Droplet */}
+                    {project.droplet_name && (
+                      <span className="flex items-center gap-1 text-gray-400">
+                        <Server className="w-3 h-3" />
+                        {project.droplet_name}
+                        {project.droplet_ip && <span className="text-gray-600">({project.droplet_ip})</span>}
+                      </span>
+                    )}
+
+                    {/* Ports */}
+                    {(project.port_dev || project.port_test || project.port_prod) && (
+                      <span className="flex items-center gap-1">
+                        {project.port_dev && <span className="px-1.5 py-0.5 bg-blue-600/20 text-blue-400 rounded">Dev:{project.port_dev}</span>}
+                        {project.port_test && <span className="px-1.5 py-0.5 bg-yellow-600/20 text-yellow-400 rounded">Test:{project.port_test}</span>}
+                        {project.port_prod && <span className="px-1.5 py-0.5 bg-green-600/20 text-green-400 rounded">Prod:{project.port_prod}</span>}
+                      </span>
+                    )}
+
+                    {/* Build Number */}
+                    {project.build_number && (
+                      <span className="text-gray-500">
+                        Build: <span className="text-gray-300">{project.build_number}</span>
+                      </span>
+                    )}
+
+                    {/* Git Repo */}
+                    {project.git_repository && (
+                      <span className="text-gray-500 truncate max-w-[200px]">
+                        {project.git_repository.replace('https://github.com/', '')}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {/* Arrow */}
-              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-blue-400 flex-shrink-0" />
             </div>
           ))}
         </div>
