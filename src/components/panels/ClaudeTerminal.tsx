@@ -457,6 +457,9 @@ export function ClaudeTerminal({
             if (trimmedLine.startsWith('⎿')) continue; // Tip indicator
             if (trimmedLine.includes('Tip: Run /')) continue;
             if (trimmedLine.includes('/install-github-app')) continue;
+            if (trimmedLine.includes('/resume later')) continue;
+            if (trimmedLine === 'terminal?' || trimmedLine.endsWith('terminal?')) continue;
+            if (trimmedLine.includes('asted text #')) continue; // "Pasted text #1" indicator
             // - Spinner characters (all the fancy ones Claude Code uses)
             if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽*•∴]+$/.test(trimmedLine)) continue;
             // - Status lines (Ideating, Thinking, shortcuts hints)
@@ -749,13 +752,21 @@ export function ClaudeTerminal({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onPaste={(e) => {
-              // Get pasted text and update state immediately
+              // Get pasted text and update both DOM and state immediately
               const pastedText = e.clipboardData.getData('text');
               const target = e.target as HTMLTextAreaElement;
               const start = target.selectionStart;
               const end = target.selectionEnd;
-              const newValue = inputValue.slice(0, start) + pastedText + inputValue.slice(end);
+              const currentVal = target.value; // Use DOM value, not React state
+              const newValue = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
+
+              // Update DOM directly for immediate availability
+              target.value = newValue;
+              // Also update React state for controlled component
               setInputValue(newValue);
+              // Set cursor position after pasted text
+              const newCursorPos = start + pastedText.length;
+              target.setSelectionRange(newCursorPos, newCursorPos);
               e.preventDefault();
             }}
             onKeyDown={(e) => {
