@@ -101,8 +101,10 @@ export function ClaudeTerminal({
   const [susanContext, setSusanContext] = useState<SusanContext | null>(null);
   const susanContextRef = useRef<SusanContext | null>(null); // Ref for WebSocket closure access
 
-  // Note: Message extraction/filtering is now handled by Chad server-side
-  // Chad broadcasts clean conversation_message events to the frontend
+  // Simple buffering for chat display
+  const responseBufferRef = useRef<string>('');
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recentMessagesRef = useRef<Set<string>>(new Set());
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -305,19 +307,8 @@ export function ClaudeTerminal({
           if (msg.type === 'session_started' || msg.type === 'session_created') {
             chadSessionIdRef.current = msg.sessionId;
             console.log('[ClaudeTerminal] Chad session started:', msg.sessionId);
-          } else if (msg.type === 'conversation_message') {
-            // Chad extracted a clean message - display it in chat
-            console.log('[ClaudeTerminal] Chat message from Chad:', msg.content?.slice(0, 50));
-            if (onConversationMessage && msg.content) {
-              onConversationMessage({
-                id: msg.id || `chad-${Date.now()}`,
-                user_id: msg.user_id || 'claude',
-                user_name: msg.user_name || 'Claude',
-                content: msg.content,
-                created_at: msg.created_at || new Date().toISOString()
-              });
-            }
           }
+          // Note: Chad handles session transcription for Susan, not real-time chat
         } catch (err) {
           console.log('[ClaudeTerminal] Chad message parse error:', err);
         }
@@ -474,8 +465,55 @@ export function ClaudeTerminal({
             }
           }
 
-          // Chat messages now come from Chad (via conversation_message events)
-          // No frontend filtering needed - Chad handles extraction and cleanup
+          // Simple filtering for chat display - just strip TUI noise, pass content through
+          const lines = cleanData.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+
+            // Skip empty lines at start of buffer
+            if (!trimmed && !responseBufferRef.current) continue;
+
+            // Skip obvious TUI noise
+            if (!trimmed) { responseBufferRef.current += '\n'; continue; }
+            if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏·✢✶✻✽]+$/.test(trimmed)) continue; // Spinners
+            if (trimmed.startsWith('Try "') || trimmed.startsWith("Try '")) continue;
+            if (trimmed.includes('Thinking...') || trimmed.includes('Ideating...')) continue;
+            if (trimmed.includes('Using tool:')) continue;
+            if (trimmed.includes('(esc to interrupt)')) continue;
+            if (trimmed.includes('for shortcuts')) continue;
+            if (trimmed === '>' || trimmed === '❯' || trimmed === '$') continue; // Bare prompts
+            if (/^>\s*.{0,3}$/.test(trimmed)) continue; // Short prompt echoes
+            if (trimmed.includes('guest passes')) continue;
+            if (trimmed.includes('queued messages')) continue;
+
+            // Pass everything else through (tables, emojis, code, etc.)
+            responseBufferRef.current += line + '\n';
+          }
+
+          // Debounce: send buffered content after output settles
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = setTimeout(() => {
+            const content = responseBufferRef.current.trim();
+            if (content.length > 3) {
+              // Simple dedup
+              const sig = content.slice(0, 200);
+              if (!recentMessagesRef.current.has(sig)) {
+                recentMessagesRef.current.add(sig);
+                setTimeout(() => recentMessagesRef.current.delete(sig), 30000);
+
+                if (onConversationMessage) {
+                  onConversationMessage({
+                    id: `claude-${Date.now()}`,
+                    user_id: 'claude',
+                    user_name: 'Claude',
+                    content: content,
+                    created_at: new Date().toISOString(),
+                  });
+                }
+              }
+            }
+            responseBufferRef.current = '';
+          }, 2000);
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
