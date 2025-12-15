@@ -523,6 +523,16 @@ export function ClaudeTerminal({
             // Use regex to catch bullets with any trailing whitespace
             if (/^[•●]\s*$/.test(trimmedLine)) continue;
             if (trimmedLine === '-' || trimmedLine === '*') continue;
+
+            // Strip leading bullet markers from lines WITH content (keep the content)
+            // Do this at line level before buffering for more reliable removal
+            if (/^[•●]/.test(trimmedLine)) {
+              const strippedLine = trimmedLine.replace(/^[•●]\s*/, '');
+              if (strippedLine.length > 0) {
+                responseBufferRef.current += strippedLine + '\n';
+                continue;
+              }
+            }
             // - Tool call status lines (● Search, ● Bash, ● Read, etc.)
             if (/^●?\s*(Search|Bash|Read|Write|Edit|Glob|Grep|Task)\s*\(/.test(trimmedLine)) continue;
             // - Tool output noise
@@ -675,7 +685,7 @@ export function ClaudeTerminal({
             debounceTimerRef.current = setTimeout(() => {
               sendBufferedContent();
               responseBufferRef.current = ''; // Clear after sending
-            }, 8000); // Wait 8s for full response to reduce spam
+            }, 3000); // Wait 3s for full response (reduced from 8s to minimize batching)
           }
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
