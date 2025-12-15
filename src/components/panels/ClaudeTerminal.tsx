@@ -106,7 +106,8 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recentMessagesRef = useRef<string[]>([]); // Last few messages for dedup
   const lastMessageTimeRef = useRef<number>(0);
-  const waitingForReadyRef = useRef<boolean>(false); // Track if waiting for Claude's first response after briefing
+  const briefingSentToClaudeRef = useRef<boolean>(false); // Track if briefing was actually sent to Claude
+  const showedReadyMessageRef = useRef<boolean>(false); // Track if we showed "Ready to work!"
 
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
@@ -374,7 +375,6 @@ export function ClaudeTerminal({
           created_at: new Date().toISOString(),
         });
       }
-      waitingForReadyRef.current = true;
 
       if (xtermRef.current) {
         xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
@@ -447,42 +447,71 @@ export function ClaudeTerminal({
             .trim();
 
           // Detect when Claude is ready and send Susan's memory briefing
+          // Look for Claude's actual input prompt - the ❯ symbol at end, or asking what to work on
           const currentContext = susanContextRef.current;
           if (!contextSentRef.current && currentContext?.greeting) {
-            // Look for Claude's ready indicators - be more flexible
-            const isClaudeReady = cleanData.includes('❯') ||
-                                  cleanData.includes('What would you like') ||
+            // Only trigger on Claude's ACTUAL ready prompt, not welcome screen
+            // Claude shows "❯" or asks "What would you like to work on?" when ready
+            const isClaudeReady = cleanData.includes('What would you like') ||
                                   cleanData.includes('How can I help') ||
-                                  cleanData.includes('ready to help') ||
-                                  cleanData.includes('work on') ||
-                                  cleanData.includes('assist') ||
-                                  // After welcome screen loads
-                                  (cleanData.includes('Claude Code') && cleanData.includes('Welcome')) ||
-                                  // Generic prompt at end of line
-                                  /[>\$❯]\s*$/.test(cleanData);
+                                  cleanData.includes('What can I help') ||
+                                  // The actual input prompt (❯ at end of output)
+                                  cleanData.endsWith('❯') ||
+                                  cleanData.includes('❯\n');
 
             if (isClaudeReady) {
               contextSentRef.current = true;
-              console.log('[ClaudeTerminal] Detected Claude ready, sending Susan briefing');
+              console.log('[ClaudeTerminal] Detected Claude ready prompt, sending Susan briefing');
 
               // Show briefing status in terminal
               if (xtermRef.current) {
                 xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
               }
 
-              // Wait a moment then send the full context
+              // Send the context as input
               setTimeout(() => {
                 if (wsRef.current?.readyState === WebSocket.OPEN) {
                   const contextMessage = buildContextPrompt(currentContext);
                   console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
-                  wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
-                  setTimeout(() => {
-                    if (wsRef.current?.readyState === WebSocket.OPEN) {
-                      wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+
+                  // Mark that we're sending the briefing now
+                  briefingSentToClaudeRef.current = true;
+
+                  // Send the message in chunks if it's long
+                  const CHUNK_SIZE = 1000;
+                  if (contextMessage.length > CHUNK_SIZE) {
+                    const chunks: string[] = [];
+                    for (let i = 0; i < contextMessage.length; i += CHUNK_SIZE) {
+                      chunks.push(contextMessage.slice(i, i + CHUNK_SIZE));
                     }
-                  }, 100);
+                    let chunkIndex = 0;
+                    const sendNextChunk = () => {
+                      if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
+                        chunkIndex++;
+                        if (chunkIndex < chunks.length) {
+                          setTimeout(sendNextChunk, 50);
+                        } else {
+                          // All chunks sent, send Enter
+                          setTimeout(() => {
+                            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                              wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                            }
+                          }, 100);
+                        }
+                      }
+                    };
+                    sendNextChunk();
+                  } else {
+                    wsRef.current.send(JSON.stringify({ type: 'input', data: contextMessage }));
+                    setTimeout(() => {
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                      }
+                    }, 100);
+                  }
                 }
-              }, 1500); // Give Claude more time to fully render
+              }, 500); // Short delay after detecting prompt
             }
           }
 
@@ -560,7 +589,17 @@ export function ClaudeTerminal({
             // Skip Susan's briefing content entirely (it's in the terminal, not chat)
             if (content.includes('LAST SESSION') ||
                 content.includes('END BRIEFING') ||
-                content.includes("I've gathered")) {
+                content.includes("I've gathered") ||
+                content.includes('Hey Claude,')) {
+              responseBufferRef.current = '';
+              return;
+            }
+
+            // Skip terminal system messages (not Claude's responses)
+            if (content.includes('Dev Studio Terminal') ||
+                content.includes('Type \'claude\'') ||
+                content.includes('root@') ||
+                content.includes('Connected to')) {
               responseBufferRef.current = '';
               return;
             }
@@ -587,9 +626,9 @@ export function ClaudeTerminal({
               lastMessageTimeRef.current = now;
 
               if (onConversationMessage) {
-                // If this is Claude's first real response, show "Ready to Work!" first
-                if (waitingForReadyRef.current) {
-                  waitingForReadyRef.current = false;
+                // Only show "Ready to work!" AFTER briefing was sent AND this is Claude's response
+                if (briefingSentToClaudeRef.current && !showedReadyMessageRef.current) {
+                  showedReadyMessageRef.current = true;
                   onConversationMessage({
                     id: `claude-ready-${Date.now()}`,
                     user_id: 'claude',
@@ -651,7 +690,8 @@ export function ClaudeTerminal({
     setMemoryStatus('idle');
     setSusanContext(null);
     // Reset chat state for next session
-    waitingForReadyRef.current = false;
+    briefingSentToClaudeRef.current = false;
+    showedReadyMessageRef.current = false;
     recentMessagesRef.current = [];
     responseBufferRef.current = '';
   }, []);
