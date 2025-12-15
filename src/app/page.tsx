@@ -21,7 +21,6 @@ import {
   ChatLogPanel,
   SessionHubPanel,
   StorageMonitorPanel,
-  ProjectManagerPanel,
   DocsPanel,
   ClaudeTerminal,
 } from '../components/panels';
@@ -660,9 +659,9 @@ User: The Boss`;
           )}
         </div>
 
-        {/* Pop-out Panel - Overlay */}
-        {activePanel && (
-          <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "projects" || activePanel === "docs" ? "w-[600px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
+        {/* Pop-out Panel - Overlay (not for 'projects' which shows in main area) */}
+        {activePanel && activePanel !== 'projects' && (
+          <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "docs" ? "w-[600px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
             <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
               <span className="text-sm font-medium text-white flex items-center gap-2">
                 {activePanel === 'files' && '📁 File Manager'}
@@ -672,7 +671,6 @@ User: The Boss`;
                 {activePanel === 'schema' && <><SupabaseLogo /> DB Schema</>}
                 {activePanel === 'chatlog' && '📜 Chat Log'}
                 {activePanel === 'hub' && '🎯 Session Hub'}
-                {activePanel === 'projects' && '📋 Project Manager'}
                 {activePanel === 'storage' && '💾 Storage Monitor'}
               </span>
               <button onClick={() => setActivePanel(null)} className="text-gray-500 hover:text-white">
@@ -707,7 +705,6 @@ User: The Boss`;
                 />
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}
-              {activePanel === 'projects' && <ProjectManagerPanel onProjectsChange={fetchProjects} />}
               {activePanel === 'docs' && <DocsPanel workerStatus={docWorkerStatus} onTriggerWorker={triggerDocWorker} />}
             </div>
           </div>
