@@ -10,8 +10,8 @@ import ProjectForm from './components/ProjectForm';
 // Tab Components
 import TodosTab from './tabs/TodosTab';
 import DocsTab from './tabs/DocsTab';
-import TablesTab from './tabs/TablesTab';
-import SchemasTab from './tabs/SchemasTab';
+import DatabaseTab from './tabs/DatabaseTab';
+import StructureTab from './tabs/StructureTab';
 import CodeChangesTab from './tabs/CodeChangesTab';
 import NotepadTab from './tabs/NotepadTab';
 import BugsTab from './tabs/BugsTab';
@@ -85,10 +85,10 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
         return <TodosTab projectPath={projectPath} />;
       case 'docs':
         return <DocsTab projectPath={projectPath} />;
-      case 'tables':
-        return <TablesTab projectPath={projectPath} tablePrefix={selectedProject.table_prefix} />;
-      case 'schemas':
-        return <SchemasTab projectPath={projectPath} />;
+      case 'database':
+        return <DatabaseTab projectPath={projectPath} tablePrefix={selectedProject.table_prefix} />;
+      case 'structure':
+        return <StructureTab projectPath={projectPath} />;
       case 'code-changes':
         return <CodeChangesTab projectPath={projectPath} />;
       case 'notepad':
