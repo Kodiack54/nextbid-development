@@ -112,14 +112,39 @@ export function ClaudeTerminal({
   // Expose send function via ref for external use (AI Team Chat)
   const sendMessage = useCallback((message: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Send text
-      wsRef.current.send(JSON.stringify({ type: 'input', data: message }));
-      // Then send Enter after a short delay
-      setTimeout(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+      // Handle chunking for long messages (same as internal input handler)
+      const CHUNK_SIZE = 1000;
+      if (message.length > CHUNK_SIZE) {
+        const chunks: string[] = [];
+        for (let i = 0; i < message.length; i += CHUNK_SIZE) {
+          chunks.push(message.slice(i, i + CHUNK_SIZE));
         }
-      }, 50);
+        let chunkIndex = 0;
+        const sendNextChunk = () => {
+          if (chunkIndex < chunks.length && wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'input', data: chunks[chunkIndex] }));
+            chunkIndex++;
+            if (chunkIndex < chunks.length) {
+              setTimeout(sendNextChunk, 50);
+            } else {
+              setTimeout(() => {
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+                }
+              }, 100);
+            }
+          }
+        };
+        sendNextChunk();
+      } else {
+        // Short message - send normally
+        wsRef.current.send(JSON.stringify({ type: 'input', data: message }));
+        setTimeout(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+          }
+        }, 50);
+      }
 
       // Add user message to conversation
       if (onConversationMessage) {
@@ -133,18 +158,16 @@ export function ClaudeTerminal({
       }
 
       // Track user input to filter echo from terminal output
-      // Store multiple fragments to catch partial echoes
-      const words = message.split(/\s+/).filter(w => w.length > 3);
-      words.slice(0, 5).forEach(word => {
-        recentUserInputsRef.current.add(word.toLowerCase());
-      });
-      // Also add the first ~50 chars as a signature
-      recentUserInputsRef.current.add(message.slice(0, 50).toLowerCase());
-      // Auto-expire after 10 seconds
+      // Store the FULL message for substring matching (not individual words - that's too aggressive)
+      const msgLower = message.toLowerCase();
+      recentUserInputsRef.current.add(msgLower);
+      // Also add without leading/trailing spaces
+      recentUserInputsRef.current.add(msgLower.trim());
+      // Auto-expire after 15 seconds
       setTimeout(() => {
-        words.slice(0, 5).forEach(word => recentUserInputsRef.current.delete(word.toLowerCase()));
-        recentUserInputsRef.current.delete(message.slice(0, 50).toLowerCase());
-      }, 10000);
+        recentUserInputsRef.current.delete(msgLower);
+        recentUserInputsRef.current.delete(msgLower.trim());
+      }, 15000);
     }
   }, [onConversationMessage]);
 
@@ -557,21 +580,26 @@ export function ClaudeTerminal({
             // - Token/timing status
             if (/↓\s*[\d.]+k?\s*tokens/.test(trimmedLine)) continue; // Token count indicators
 
-            // Filter echoed user input (terminal echoes what you type)
+            // Filter echoed user input (terminal echoes what you type, wrapped across lines)
             const lineLower = trimmedLine.toLowerCase();
-            const lineFirst50 = lineLower.slice(0, 50);
-            // Check if this line matches any recent user input signature or contains tracked words
-            if (recentUserInputsRef.current.has(lineFirst50)) continue;
-            // Check for word matches (helps catch partial echoes)
-            let isUserEcho = false;
-            for (const trackedWord of recentUserInputsRef.current) {
-              // Only match substantial words (4+ chars) to avoid false positives
-              if (trackedWord.length >= 4 && lineLower.includes(trackedWord)) {
-                isUserEcho = true;
+            // Check if this line is a SUBSTRING of any recent user message
+            // This catches terminal-wrapped echoes without blocking legitimate responses
+            let isEchoedInput = false;
+            for (const trackedMsg of recentUserInputsRef.current) {
+              // Skip very short tracked messages (avoid false positives)
+              if (trackedMsg.length < 10) continue;
+              // Check if line is a substring of user's message (terminal line-wrapping)
+              if (trackedMsg.includes(lineLower) && lineLower.length > 5) {
+                isEchoedInput = true;
+                break;
+              }
+              // Check if user's message starts with this line (partial echo)
+              if (trackedMsg.startsWith(lineLower) && lineLower.length > 5) {
+                isEchoedInput = true;
                 break;
               }
             }
-            if (isUserEcho) continue;
+            if (isEchoedInput) continue;
 
             // Everything else goes through - INCLUDING box drawing!
             // Preserve original indentation (use line, not trimmedLine)
