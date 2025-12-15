@@ -1,0 +1,230 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Plus, ArrowLeft } from 'lucide-react';
+import { Project, TabType, TABS } from './types';
+import ProjectCard from './components/ProjectCard';
+import ProjectHeader from './components/ProjectHeader';
+import ProjectTabs from './components/ProjectTabs';
+import ProjectForm from './components/ProjectForm';
+
+// Tab Components
+import TodosTab from './tabs/TodosTab';
+import DocsTab from './tabs/DocsTab';
+import TablesTab from './tabs/TablesTab';
+import SchemasTab from './tabs/SchemasTab';
+import CodeChangesTab from './tabs/CodeChangesTab';
+import NotepadTab from './tabs/NotepadTab';
+import BugsTab from './tabs/BugsTab';
+
+export default function ProjectManagementPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectSlug = searchParams.get('project');
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('todos');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  // Fetch projects
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  // Handle project selection from URL
+  useEffect(() => {
+    if (projectSlug && projects.length > 0) {
+      const project = projects.find(p => p.slug === projectSlug);
+      if (project) {
+        setSelectedProject(project);
+      }
+    } else if (!projectSlug) {
+      setSelectedProject(null);
+    }
+  }, [projectSlug, projects]);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('/api/projects');
+      const data = await response.json();
+      if (data.success) {
+        setProjects(data.projects);
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectProject = (project: Project) => {
+    router.push(`/project-management?project=${project.slug}`);
+  };
+
+  const handleBackToList = () => {
+    router.push('/project-management');
+  };
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+    setShowProjectForm(true);
+  };
+
+  const handleAddProject = () => {
+    setEditingProject(null);
+    setShowProjectForm(true);
+  };
+
+  const handleFormClose = () => {
+    setShowProjectForm(false);
+    setEditingProject(null);
+  };
+
+  const handleFormSave = () => {
+    fetchProjects();
+    handleFormClose();
+  };
+
+  const renderTabContent = () => {
+    if (!selectedProject) return null;
+
+    const projectPath = selectedProject.server_path || '';
+
+    switch (activeTab) {
+      case 'todos':
+        return <TodosTab projectPath={projectPath} />;
+      case 'docs':
+        return <DocsTab projectPath={projectPath} />;
+      case 'tables':
+        return <TablesTab projectPath={projectPath} tablePrefix={selectedProject.table_prefix} />;
+      case 'schemas':
+        return <SchemasTab projectPath={projectPath} />;
+      case 'code-changes':
+        return <CodeChangesTab projectPath={projectPath} />;
+      case 'notepad':
+        return <NotepadTab projectPath={projectPath} />;
+      case 'bugs':
+        return <BugsTab projectPath={projectPath} />;
+      default:
+        return null;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin text-4xl mb-4">⚙️</div>
+          <p className="text-gray-400">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Detail View - when a project is selected
+  if (selectedProject) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header */}
+        <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+          <button
+            onClick={handleBackToList}
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>All Projects</span>
+          </button>
+          <ProjectHeader
+            project={selectedProject}
+            onEdit={() => handleEditProject(selectedProject)}
+          />
+        </div>
+
+        {/* Tabs */}
+        <ProjectTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-auto p-6">
+          {renderTabContent()}
+        </div>
+
+        {/* Project Form Modal */}
+        {showProjectForm && (
+          <ProjectForm
+            project={editingProject}
+            onClose={handleFormClose}
+            onSave={handleFormSave}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // List View - all projects
+  return (
+    <div className="min-h-screen bg-gray-900">
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Project Management</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              {projects.length} project{projects.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <button
+            onClick={handleAddProject}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Project
+          </button>
+        </div>
+      </div>
+
+      {/* Project Grid */}
+      <div className="p-6">
+        {projects.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4">📁</div>
+            <h3 className="text-xl font-semibold text-white mb-2">No Projects Yet</h3>
+            <p className="text-gray-400 mb-4">Create your first project to get started</p>
+            <button
+              onClick={handleAddProject}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+            >
+              Add Project
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map(project => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onClick={() => handleSelectProject(project)}
+                onEdit={() => handleEditProject(project)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Project Form Modal */}
+      {showProjectForm && (
+        <ProjectForm
+          project={editingProject}
+          onClose={handleFormClose}
+          onSave={handleFormSave}
+        />
+      )}
+    </div>
+  );
+}
