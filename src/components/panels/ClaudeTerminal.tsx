@@ -555,13 +555,18 @@ export function ClaudeTerminal({
 
             // Post-process content for cleaner formatting
             // 1. Join standalone bullets with next line (• + newline + content → • content)
-            bufferedContent = bufferedContent.replace(/^•\s*\n(\S)/gm, '• $1');
+            // Handle whitespace before content on next line
+            bufferedContent = bufferedContent.replace(/^•\s*\n\s*/gm, '• ');
             // 2. Join numbered items with next line (1.\n + content → 1. content)
-            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n(\S)/gm, '$1 $2');
+            // Handle whitespace before content on next line
+            bufferedContent = bufferedContent.replace(/^(\d+\.)\s*\n\s*/gm, '$1 ');
             // 3. Remove redundant bullet markers (• - → -)
             bufferedContent = bufferedContent.replace(/^•\s*-\s*/gm, '- ');
             // 4. Remove empty bullet/marker lines
             bufferedContent = bufferedContent.replace(/^[•●]\s*$/gm, '');
+            // 5. Normalize bullet lists - ensure consistent spacing after bullet
+            bufferedContent = bufferedContent.replace(/^-\s+/gm, '- ');
+            bufferedContent = bufferedContent.replace(/^•\s+/gm, '• ');
             // 5. Clean up multiple consecutive newlines
             bufferedContent = bufferedContent.replace(/\n{3,}/g, '\n\n');
             // 6. Normalize indentation - trim trailing but keep leading structure
