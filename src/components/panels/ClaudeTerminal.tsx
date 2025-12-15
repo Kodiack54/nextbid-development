@@ -550,7 +550,26 @@ export function ClaudeTerminal({
 
           // Function to send buffered content to chat
           const sendBufferedContent = () => {
-            const bufferedContent = responseBufferRef.current.trim();
+            let bufferedContent = responseBufferRef.current.trim();
+
+            // Post-process content for cleaner formatting
+            // 1. Remove standalone bullets on their own lines (join with next line)
+            bufferedContent = bufferedContent.replace(/^•\s*\n/gm, '• ');
+            // 2. Remove empty bullet lines
+            bufferedContent = bufferedContent.replace(/^•\s*$/gm, '');
+            // 3. Clean up multiple consecutive newlines
+            bufferedContent = bufferedContent.replace(/\n{3,}/g, '\n\n');
+            // 4. Remove leading/trailing whitespace from each line but preserve indentation structure
+            bufferedContent = bufferedContent.split('\n').map(line => {
+              // Keep intentional indentation (2+ spaces) but trim trailing
+              const match = line.match(/^(\s{2,})/);
+              if (match) {
+                return match[1] + line.trim();
+              }
+              return line.trim();
+            }).join('\n');
+            // 5. Final trim
+            bufferedContent = bufferedContent.trim();
 
             // Only send if we have meaningful content
             if (bufferedContent.length > 10) {
