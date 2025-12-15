@@ -29,8 +29,8 @@ interface ExtractedInfo {
  */
 
 async function extractInfoFromMessages(messages: any[]): Promise<ExtractedInfo> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('No API key');
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('No OpenAI API key');
 
   // Build conversation text
   const conversationText = messages
@@ -48,16 +48,16 @@ async function extractInfoFromMessages(messages: any[]): Promise<ExtractedInfo> 
     };
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Use OpenAI for background busy work (cost effective)
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-3-5-20241022', // Use Haiku for cost savings (75% cheaper)
-      max_tokens: 1024, // Reduced for cost savings
+      model: 'gpt-4o-mini', // Use GPT-4o-mini for background tasks (cost effective)
+      max_tokens: 1024,
       messages: [{
         role: 'user',
         content: `Analyze this development conversation and extract key information. Return ONLY valid JSON.
@@ -81,7 +81,7 @@ If a category has nothing, use empty array []. Return ONLY the JSON, no other te
   });
 
   if (!response.ok) {
-    console.error('Claude API error:', await response.text());
+    console.error('OpenAI API error:', await response.text());
     return {
       decisions: [],
       todos: [],
@@ -93,7 +93,7 @@ If a category has nothing, use empty array []. Return ONLY the JSON, no other te
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text || '{}';
+  const text = data.choices?.[0]?.message?.content || '{}';
 
   try {
     // Extract JSON from response (handle markdown code blocks)
