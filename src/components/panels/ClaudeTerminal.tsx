@@ -374,7 +374,7 @@ export function ClaudeTerminal({
             // Extract all bullet points from this chunk
             const bulletMatches = cleanData.match(/●\s*[^\n●]+/g);
             if (bulletMatches) {
-              bulletMatches.forEach(match => {
+              bulletMatches.forEach((match: string) => {
                 const content = match.replace(/^●\s*/, '').trim();
                 if (content.length > 5) {
                   responseBufferRef.current += content + '\n';
