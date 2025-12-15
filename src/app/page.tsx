@@ -647,7 +647,13 @@ User: The Boss`;
               { id: 'docs', icon: '📝', label: 'Docs' },
             ]}
             activePanel={activePanel}
-            onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
+            onPanelChange={(panel) => {
+              if (panel === 'projects') {
+                window.location.href = '/project-management';
+              } else {
+                setActivePanel(panel as typeof activePanel);
+              }
+            }}
           />
 
           <div className="flex-1" />
