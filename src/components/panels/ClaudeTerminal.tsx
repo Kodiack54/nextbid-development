@@ -474,8 +474,16 @@ export function ClaudeTerminal({
           const sendBufferedContent = () => {
             const bufferedContent = responseBufferRef.current.trim();
 
-            // Only send if we have meaningful content and it's different from last
-            if (bufferedContent.length > 10 && bufferedContent !== lastSentMessageRef.current) {
+            // Only send if we have meaningful content
+            if (bufferedContent.length > 10) {
+              // Skip if too similar to last message (check first 100 chars to catch partial dupes)
+              const contentStart = bufferedContent.slice(0, 100);
+              const lastStart = lastSentMessageRef.current.slice(0, 100);
+              if (contentStart === lastStart) {
+                responseBufferRef.current = '';
+                return;
+              }
+
               // Skip only actual command execution output (not grids Claude intentionally shows)
               const isToolOutput = bufferedContent.includes('curl ') ||
                                    bufferedContent.includes('npm install') ||
@@ -509,19 +517,26 @@ export function ClaudeTerminal({
             }
           };
 
-          // If response is complete, send immediately
+          // If response is complete, send after a short delay (let buffer fill)
           if (isResponseComplete && responseBufferRef.current.length > 10) {
             if (debounceTimerRef.current) {
               clearTimeout(debounceTimerRef.current);
             }
-            sendBufferedContent();
+            // Small delay to let any final content arrive
+            debounceTimerRef.current = setTimeout(() => {
+              sendBufferedContent();
+              responseBufferRef.current = ''; // Clear after sending
+            }, 500);
           } else {
             // Otherwise debounce: Wait for output to settle before sending to chat
             if (debounceTimerRef.current) {
               clearTimeout(debounceTimerRef.current);
             }
 
-            debounceTimerRef.current = setTimeout(sendBufferedContent, 5000); // Wait 5s for full response to reduce spam
+            debounceTimerRef.current = setTimeout(() => {
+              sendBufferedContent();
+              responseBufferRef.current = ''; // Clear after sending
+            }, 8000); // Wait 8s for full response to reduce spam
           }
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
