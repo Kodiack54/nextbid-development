@@ -394,16 +394,29 @@ export function ClaudeTerminal({
       }
       return;
     }
-    // Claude Code needs TWO carriage returns: one to end input, one to submit
-    const payload = inputValue + '\r\r';
-    console.log('[ClaudeTerminal] Sending input:', JSON.stringify(payload), 'length:', payload.length);
+    console.log('[ClaudeTerminal] Sending input:', JSON.stringify(inputValue), 'length:', inputValue.length);
 
     // Echo input locally so user sees what they typed
     if (xtermRef.current) {
       xtermRef.current.writeln(`\x1b[36m> ${inputValue}\x1b[0m`);
     }
 
-    socketRef.current.emit('input', payload);
+    // Send message first
+    socketRef.current.emit('input', inputValue);
+
+    // Then send Enter after a small delay to submit (avoids paste detection issues)
+    setTimeout(() => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('input', '\r');
+        // Send second Enter after another delay to actually submit
+        setTimeout(() => {
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('input', '\r');
+          }
+        }, 100);
+      }
+    }, 100);
+
     setInputValue('');
   }, [inputValue]);
 
