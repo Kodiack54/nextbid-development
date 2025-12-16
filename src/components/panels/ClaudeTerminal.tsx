@@ -39,7 +39,6 @@ export function ClaudeTerminal({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const onDataDisposerRef = useRef<{ dispose: () => void } | null>(null);
   const contextSentRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
@@ -257,21 +256,8 @@ export function ClaudeTerminal({
         }
       }, BRIEFING_FALLBACK_MS);
 
-      // Wire up xterm keyboard input to WebSocket
-      if (xtermRef.current) {
-        // Dispose old handler if exists
-        onDataDisposerRef.current?.dispose();
-
-        // onData fires when user types in the terminal
-        onDataDisposerRef.current = xtermRef.current.onData((data) => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data }));
-          }
-        });
-
-        // Focus the terminal so it can receive input
-        xtermRef.current.focus();
-      }
+      // Focus input box when connected
+      setTimeout(() => inputRef.current?.focus(), 100);
     };
 
     ws.onmessage = (event) => {
@@ -369,10 +355,6 @@ export function ClaudeTerminal({
   }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, susanContextRef]);
 
   const disconnect = useCallback(() => {
-    // Clean up xterm input handler
-    onDataDisposerRef.current?.dispose();
-    onDataDisposerRef.current = null;
-
     wsRef.current?.close();
     wsRef.current = null;
     disconnectChad();
@@ -388,13 +370,6 @@ export function ClaudeTerminal({
       connectRef.current = connect;
     }
   }, [connectRef, connect]);
-
-  // Focus xterm when clicking on terminal area
-  const handleTerminalClick = useCallback(() => {
-    if (connected && xtermRef.current) {
-      xtermRef.current.focus();
-    }
-  }, [connected]);
 
   // Send input to terminal
   const sendInput = useCallback(() => {
@@ -472,11 +447,10 @@ export function ClaudeTerminal({
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Terminal output - click to focus and type directly */}
+      {/* Terminal output */}
       <div
         ref={terminalRef}
-        onClick={handleTerminalClick}
-        className={`flex-1 min-h-0 overflow-x-auto overflow-y-auto ${connected ? 'cursor-text' : ''}`}
+        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto"
         style={{ padding: '8px' }}
       />
 
