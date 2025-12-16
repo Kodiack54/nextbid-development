@@ -108,7 +108,7 @@ export default function CorrectionMenu({ itemType, itemId, itemTitle, currentPro
   };
 
   const needsInput = selectedType === 'move' || selectedType === 'reword' || selectedType === 'note';
-  const canSubmit = selectedType && (!needsInput || (selectedType === 'move' ? targetProject : note) || selectedType === 'remove');
+  const canSubmit = selectedType && (!needsInput || (selectedType === 'move' ? targetProject : note));
 
   return (
     <div className="relative" ref={menuRef}>
