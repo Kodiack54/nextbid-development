@@ -373,7 +373,12 @@ export function ClaudeTerminal({
 
   // Send input to terminal
   const sendInput = useCallback(() => {
-    if (!inputValue.trim() || !wsRef.current) return;
+    if (!inputValue.trim()) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('[ClaudeTerminal] Cannot send - WebSocket not connected');
+      return;
+    }
+    console.log('[ClaudeTerminal] Sending input:', inputValue);
     wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\r' }));
     setInputValue('');
   }, [inputValue]);
