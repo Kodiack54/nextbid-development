@@ -17,8 +17,6 @@ import {
   cleanAnsiCodes,
   sendChunkedMessage,
   sendMultipleEnters,
-  sendArrowKey,
-  sendEscape,
   useSusanBriefing,
   buildContextPrompt,
   useChadTranscription,
@@ -41,6 +39,7 @@ export function ClaudeTerminal({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const onDataDisposerRef = useRef<{ dispose: () => void } | null>(null);
   const contextSentRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
@@ -256,7 +255,21 @@ export function ClaudeTerminal({
         }
       }, BRIEFING_FALLBACK_MS);
 
-      terminalRef.current?.focus();
+      // Wire up xterm keyboard input to WebSocket
+      if (xtermRef.current) {
+        // Dispose old handler if exists
+        onDataDisposerRef.current?.dispose();
+
+        // onData fires when user types in the terminal
+        onDataDisposerRef.current = xtermRef.current.onData((data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data }));
+          }
+        });
+
+        // Focus the terminal so it can receive input
+        xtermRef.current.focus();
+      }
     };
 
     ws.onmessage = (event) => {
@@ -354,6 +367,10 @@ export function ClaudeTerminal({
   }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, susanContextRef]);
 
   const disconnect = useCallback(() => {
+    // Clean up xterm input handler
+    onDataDisposerRef.current?.dispose();
+    onDataDisposerRef.current = null;
+
     wsRef.current?.close();
     wsRef.current = null;
     disconnectChad();
@@ -370,34 +387,10 @@ export function ClaudeTerminal({
     }
   }, [connectRef, connect]);
 
-  // Handle direct terminal keystrokes (when clicking on terminal area)
-  const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!connected || !wsRef.current) return;
-
-    // Don't interfere with system shortcuts
-    if (e.metaKey || e.ctrlKey) return;
-
-    e.preventDefault();
-
-    if (e.key === 'Enter') {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-    } else if (e.key === 'Escape') {
-      sendEscape(wsRef.current);
-    } else if (e.key === 'ArrowUp') {
-      sendArrowKey(wsRef.current, 'up');
-    } else if (e.key === 'ArrowDown') {
-      sendArrowKey(wsRef.current, 'down');
-    } else if (e.key === 'ArrowLeft') {
-      sendArrowKey(wsRef.current, 'left');
-    } else if (e.key === 'ArrowRight') {
-      sendArrowKey(wsRef.current, 'right');
-    } else if (e.key === 'Backspace') {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: '\x7f' }));
-    } else if (e.key === 'Tab') {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: '\t' }));
-    } else if (e.key.length === 1) {
-      // Regular character
-      wsRef.current.send(JSON.stringify({ type: 'input', data: e.key }));
+  // Focus xterm when clicking on terminal area
+  const handleTerminalClick = useCallback(() => {
+    if (connected && xtermRef.current) {
+      xtermRef.current.focus();
     }
   }, [connected]);
 
@@ -465,9 +458,8 @@ export function ClaudeTerminal({
       {/* Terminal output - click to focus and type directly */}
       <div
         ref={terminalRef}
-        tabIndex={connected ? 0 : -1}
-        onKeyDown={handleTerminalKeyDown}
-        className={`flex-1 min-h-0 overflow-x-auto overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${connected ? 'cursor-text' : ''}`}
+        onClick={handleTerminalClick}
+        className={`flex-1 min-h-0 overflow-x-auto overflow-y-auto ${connected ? 'cursor-text' : ''}`}
         style={{ padding: '8px' }}
       />
 
@@ -475,7 +467,7 @@ export function ClaudeTerminal({
       <div className="shrink-0 px-3 py-1.5 bg-gray-800 border-t border-gray-700">
         <p className="text-gray-500 text-xs">
           {connected
-            ? 'Click terminal and type directly. Esc for TUI navigation, arrows to scroll.'
+            ? 'Click terminal to focus, then type directly. All keys work natively.'
             : 'Click Connect to start a session with Server Claude.'
           }
         </p>
