@@ -67,9 +67,9 @@ export default function DevEnvironmentPage() {
     enabled: true,
   });
 
-  // Doc Worker - runs every 5 minutes to auto-document conversations
+  // Doc Worker - runs every 30 minutes to auto-document conversations
   const { status: docWorkerStatus, triggerNow: triggerDocWorker, lastResult: docWorkerResult } = useDocWorker({
-    intervalMs: 300000, // Run every 5 minutes
+    intervalMs: 1800000, // Run every 30 minutes (reduced from 5 min to avoid OpenAI rate limits)
     enabled: true,
   });
 
