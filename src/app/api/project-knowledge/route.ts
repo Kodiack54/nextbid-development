@@ -14,22 +14,36 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
+    let projectPath = searchParams.get('project_path');
     const type = searchParams.get('type');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    if (!projectId) {
-      return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
+    // If project_id provided, look up the project_path
+    if (projectId && !projectPath) {
+      const { data: project } = await supabase
+        .from('dev_projects')
+        .select('server_path')
+        .eq('id', projectId)
+        .single();
+
+      if (project?.server_path) {
+        projectPath = project.server_path;
+      }
+    }
+
+    if (!projectPath) {
+      return NextResponse.json({ error: 'project_id or project_path is required' }, { status: 400 });
     }
 
     let query = supabase
       .from('dev_ai_knowledge')
       .select('*')
-      .eq('project_id', projectId)
+      .eq('project_path', projectPath)
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (type) {
-      query = query.eq('knowledge_type', type);
+      query = query.eq('category', type);
     }
 
     const { data: knowledge, error } = await query;
@@ -56,20 +70,35 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { project_id, knowledge_type, content, session_id, metadata } = body;
+    const { project_id, project_path, category, title, summary, session_id } = body;
 
-    if (!project_id || !knowledge_type || !content) {
-      return NextResponse.json({ error: 'project_id, knowledge_type, and content are required' }, { status: 400 });
+    // Resolve project_path from project_id if needed
+    let resolvedPath = project_path;
+    if (project_id && !resolvedPath) {
+      const { data: project } = await supabase
+        .from('dev_projects')
+        .select('server_path')
+        .eq('id', project_id)
+        .single();
+
+      if (project?.server_path) {
+        resolvedPath = project.server_path;
+      }
+    }
+
+    if (!resolvedPath || !category || !title) {
+      return NextResponse.json({ error: 'project_path (or project_id), category, and title are required' }, { status: 400 });
     }
 
     const { data: item, error } = await supabase
       .from('dev_ai_knowledge')
       .insert({
-        project_id,
-        knowledge_type,
-        content,
-        session_id,
-        metadata: metadata || {},
+        project_path: resolvedPath,
+        category,
+        title,
+        summary: summary || null,
+        session_id: session_id || null,
+        source: 'manual',
       })
       .select()
       .single();
