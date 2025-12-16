@@ -389,10 +389,20 @@ export function ClaudeTerminal({
     if (!inputValue.trim()) return;
     if (!socketRef.current?.connected) {
       console.error('[ClaudeTerminal] Cannot send - not connected');
+      if (xtermRef.current) {
+        xtermRef.current.writeln('\x1b[31m[Not connected - cannot send]\x1b[0m');
+      }
       return;
     }
-    console.log('[ClaudeTerminal] Sending input:', inputValue);
-    socketRef.current.emit('input', inputValue + '\r');
+    const payload = inputValue + '\r';
+    console.log('[ClaudeTerminal] Sending input:', JSON.stringify(payload), 'length:', payload.length);
+
+    // Echo input locally so user sees what they typed
+    if (xtermRef.current) {
+      xtermRef.current.writeln(`\x1b[36m> ${inputValue}\x1b[0m`);
+    }
+
+    socketRef.current.emit('input', payload);
     setInputValue('');
   }, [inputValue]);
 

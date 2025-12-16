@@ -71,8 +71,23 @@ io.on('connection', (socket) => {
 
   // Handle input from client
   socket.on('input', (data) => {
-    console.log(`[Terminal Server] Received input: ${data.slice(0, 50)}`);
-    ptyProcess.write(data);
+    const inputStr = typeof data === 'string' ? data : String(data);
+    console.log(`[Terminal Server] Received input (${inputStr.length} chars): "${inputStr.replace(/\r/g, '\\r').replace(/\n/g, '\\n').slice(0, 80)}"`);
+
+    try {
+      // Check if PTY is still alive
+      if (ptyProcess.pid) {
+        console.log(`[Terminal Server] Writing to PTY (pid: ${ptyProcess.pid})...`);
+        ptyProcess.write(inputStr);
+        console.log(`[Terminal Server] Write complete`);
+      } else {
+        console.error(`[Terminal Server] PTY has no pid - may be dead`);
+        socket.emit('output', '\x1b[31m[Error: Terminal process not running]\x1b[0m\r\n');
+      }
+    } catch (err) {
+      console.error(`[Terminal Server] Write error:`, err);
+      socket.emit('output', `\x1b[31m[Error: ${err.message}]\x1b[0m\r\n`);
+    }
   });
 
   // Handle resize
