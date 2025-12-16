@@ -94,6 +94,9 @@ export async function GET(request: NextRequest) {
       'chad': { name: 'Chad', role: 'Assistant Dev', emoji: '🧑‍💻' },
       'ryan': { name: 'Ryan', role: 'Runner', emoji: '🏃' },
       'susan': { name: 'Susan', role: 'Librarian', emoji: '👩‍💼' },
+      'tiffany': { name: 'Tiffany', role: 'Tester', emoji: '🧪' },
+      'mike': { name: 'Mike', role: 'Tester', emoji: '🔬' },
+      'clair': { name: 'Clair', role: 'Doc Manager', emoji: '📚' },
     };
 
     usage?.forEach((row) => {

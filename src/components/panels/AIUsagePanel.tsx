@@ -24,6 +24,9 @@ const teamEmojis: Record<string, string> = {
   'chad': '🧑‍💻',
   'ryan': '🏃',
   'susan': '👩‍💼',
+  'tiffany': '🧪',
+  'mike': '🔬',
+  'clair': '📚',
 };
 
 export function AIUsagePanel() {
