@@ -188,6 +188,9 @@ export function ClaudeTerminal({
       setConnected(true);
       setConnecting(false);
 
+      // Connect Chad for transcription/logging
+      connectToChad();
+
       if (xtermRef.current) {
         xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
         xtermRef.current.writeln('');
@@ -255,6 +258,9 @@ export function ClaudeTerminal({
         if (msg.type === 'output' && xtermRef.current) {
           xtermRef.current.write(msg.data);
           xtermRef.current.scrollToBottom();
+
+          // Send to Chad for transcription
+          sendToChad(msg.data);
 
           const cleanData = cleanAnsiCodes(msg.data);
 
