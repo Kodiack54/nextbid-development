@@ -1,59 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+const CHAD_URL = process.env.CHAD_URL || 'http://localhost:5401';
 
 /**
  * GET /api/chad/sessions
- * Get Chad's session dumps from dev_ai_sessions
- * Shows pending dumps first, then recent processed ones
+ * Proxy to Chad's /api/sessions endpoint
+ * Gets all sessions Chad has recorded
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status'); // pending_review, processed, all
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = searchParams.get('limit') || '50';
 
-    let query = supabase
-      .from('dev_ai_sessions')
-      .select('*')
-      .order('started_at', { ascending: false })
-      .limit(limit);
+    // Proxy to Chad's actual sessions endpoint
+    const response = await fetch(`${CHAD_URL}/api/sessions?limit=${limit}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
 
-    // Filter by status if specified
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
+    if (!response.ok) {
+      console.error('Chad sessions error:', response.status);
+      return NextResponse.json({ error: 'Failed to fetch from Chad' }, { status: 500 });
     }
 
-    const { data: sessions, error } = await query;
+    const sessions = await response.json();
 
-    if (error) {
-      console.error('Error fetching Chad sessions:', error);
-      return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 });
-    }
-
-    // Transform for UI
-    const transformed = (sessions || []).map(s => ({
+    // Transform for UI - Chad returns array directly
+    const transformed = (Array.isArray(sessions) ? sessions : []).map((s: any) => ({
       id: s.id,
-      title: s.source_name || s.project_path || 'Unknown Source',
+      title: s.project_path?.split('/').pop() || 'Unknown',
       status: s.status,
       started_at: s.started_at,
       ended_at: s.ended_at,
       summary: s.summary,
-      source_type: s.source_type,
-      source_name: s.source_name,
+      source_type: s.source_type || 'terminal',
+      source_name: s.source_name || s.project_path,
       message_count: s.message_count,
       project_path: s.project_path,
       // Show if Susan has processed this
-      processed_by_susan: s.status === 'processed',
-      needs_review: s.status === 'pending_review'
+      processed_by_susan: s.status === 'processed' || s.status === 'cataloged',
+      needs_review: s.status === 'active' || s.status === 'pending_review'
     }));
 
-    // Count pending
-    const pendingCount = transformed.filter(s => s.needs_review).length;
+    // Count pending (active sessions need review)
+    const pendingCount = transformed.filter((s: any) => s.needs_review).length;
 
     return NextResponse.json({
       success: true,
@@ -69,47 +58,30 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/chad/sessions
- * Mark a session as processed by Susan
+ * Update a session (mark as processed, add summary, etc.)
  */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { session_id, status, summary, processed_by } = body;
+    const { session_id, status, summary } = body;
 
     if (!session_id) {
       return NextResponse.json({ error: 'session_id is required' }, { status: 400 });
     }
 
-    const updates: Record<string, unknown> = {};
+    // Proxy to Chad's session update endpoint
+    const response = await fetch(`${CHAD_URL}/api/sessions/${session_id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, summary })
+    });
 
-    if (status) {
-      updates.status = status;
-      if (status === 'processed') {
-        updates.processed_at = new Date().toISOString();
-        updates.processed_by = processed_by || 'susan';
-      }
-    }
-
-    if (summary) {
-      updates.summary = summary;
-    }
-
-    const { data: session, error } = await supabase
-      .from('dev_ai_sessions')
-      .update(updates)
-      .eq('id', session_id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating session:', error);
+    if (!response.ok) {
       return NextResponse.json({ error: 'Failed to update session' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      session
-    });
+    const result = await response.json();
+    return NextResponse.json({ success: true, session: result });
   } catch (error) {
     console.error('Error in chad sessions PATCH:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
