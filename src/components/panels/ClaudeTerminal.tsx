@@ -19,7 +19,6 @@ import {
   sendMultipleEnters,
   sendArrowKey,
   sendEscape,
-  sendEnter,
   useSusanBriefing,
   buildContextPrompt,
   useChadTranscription,
@@ -42,12 +41,10 @@ export function ClaudeTerminal({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const contextSentRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [inputValue, setInputValue] = useState('');
 
   // Use extracted hooks
   const {
@@ -259,7 +256,7 @@ export function ClaudeTerminal({
         }
       }, BRIEFING_FALLBACK_MS);
 
-      inputRef.current?.focus();
+      terminalRef.current?.focus();
     };
 
     ws.onmessage = (event) => {
@@ -373,60 +370,6 @@ export function ClaudeTerminal({
     }
   }, [connectRef, connect]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const currentValue = (e.target as HTMLTextAreaElement).value;
-      if (currentValue.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-        const text = currentValue.trim();
-        sendChunkedMessage(wsRef.current, text);
-        setInputValue('');
-      } else if (!currentValue.trim() && wsRef.current) {
-        sendEnter(wsRef.current);
-      }
-    } else if (e.key === 'Escape' && wsRef.current) {
-      sendEscape(wsRef.current);
-    } else if (e.key === 'ArrowUp' && wsRef.current) {
-      e.preventDefault();
-      sendArrowKey(wsRef.current, 'up');
-    } else if (e.key === 'ArrowDown' && wsRef.current) {
-      e.preventDefault();
-      sendArrowKey(wsRef.current, 'down');
-    } else if (e.key === 'ArrowRight' && wsRef.current) {
-      e.preventDefault();
-      sendArrowKey(wsRef.current, 'right');
-    } else if (e.key === 'ArrowLeft' && wsRef.current) {
-      e.preventDefault();
-      sendArrowKey(wsRef.current, 'left');
-    }
-  }, []);
-
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const pastedText = e.clipboardData.getData('text');
-    const target = e.target as HTMLTextAreaElement;
-    const start = target.selectionStart;
-    const end = target.selectionEnd;
-    const currentVal = target.value;
-    const newValue = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
-
-    target.value = newValue;
-    setInputValue(newValue);
-    const newCursorPos = start + pastedText.length;
-    target.setSelectionRange(newCursorPos, newCursorPos);
-    e.preventDefault();
-  }, []);
-
-  const sendInput = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      if (inputValue.trim()) {
-        sendChunkedMessage(wsRef.current, inputValue);
-      } else {
-        sendEnter(wsRef.current);
-      }
-      setInputValue('');
-    }
-  }, [inputValue]);
-
   // Handle direct terminal keystrokes (when clicking on terminal area)
   const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!connected || !wsRef.current) return;
@@ -466,19 +409,19 @@ export function ClaudeTerminal({
           <span className="text-base">👨‍💻</span>
           <span className="text-sm font-medium text-white">Claude</span>
           <span className="text-xs text-orange-400/60">[Internal Gateway]</span>
-          {/* Connection lights */}
-          <div className="flex items-center gap-1 ml-2">
-            {/* Green = Studio WebSocket connected */}
-            <div
-              className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-600'}`}
-              title={connected ? 'Studio connected' : 'Studio disconnected'}
-            />
-            {/* Blue = MCP bridge connected (from external Claude Code) */}
-            <div
-              className="w-2.5 h-2.5 rounded-full bg-gray-600"
-              title="MCP bridge (coming soon)"
-            />
-          </div>
+          {/* Connection status badge */}
+          <span className={`px-1.5 py-0.5 text-xs rounded ${
+            connected ? 'bg-green-600/20 text-green-400' :
+            connecting ? 'bg-yellow-600/20 text-yellow-400' :
+            'bg-gray-700 text-gray-400'
+          }`}>
+            {connected ? 'Connected' : connecting ? 'Connecting...' : 'Disconnected'}
+          </span>
+          {/* Blue MCP dot - shows when external Claude Code is connected via MCP */}
+          <div
+            className="w-2.5 h-2.5 rounded-full bg-gray-600"
+            title="MCP bridge (external Claude Code)"
+          />
           {connected && (
             <span className={`flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${
               memoryStatus === 'loaded' ? 'bg-purple-600/20 text-purple-400' :
@@ -528,30 +471,14 @@ export function ClaudeTerminal({
         style={{ padding: '8px' }}
       />
 
-      {/* Input area */}
-      <div className="shrink-0 p-2 bg-gray-800 border-t border-gray-700">
-        <div className="flex gap-2">
-          <span className="text-orange-400 font-mono text-sm pt-2">$</span>
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onPaste={handlePaste}
-            onKeyDown={handleKeyDown}
-            disabled={!connected}
-            placeholder={connected ? 'Type command and press Enter (Shift+Enter for new line)...' : 'Click Connect first'}
-            rows={6}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm font-mono placeholder-gray-500 focus:outline-none focus:border-orange-500 disabled:opacity-50 resize-y min-h-[120px]"
-          />
-          <button
-            onClick={sendInput}
-            disabled={!connected}
-            className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded text-sm self-end"
-          >
-            Send
-          </button>
-        </div>
-        <p className="text-gray-500 text-xs mt-1 ml-6">Click terminal to type directly, or use input box for multi-line. Esc for TUI navigation.</p>
+      {/* Hint bar */}
+      <div className="shrink-0 px-3 py-1.5 bg-gray-800 border-t border-gray-700">
+        <p className="text-gray-500 text-xs">
+          {connected
+            ? 'Click terminal and type directly. Esc for TUI navigation, arrows to scroll.'
+            : 'Click Connect to start a session with Server Claude.'
+          }
+        </p>
       </div>
     </div>
   );

@@ -453,7 +453,7 @@ export default function AITeamChat({
                   }`}
                 >
                   <div className="relative text-xl">
-                    📋
+                    👩‍🔬
                     <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-gray-900" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -568,7 +568,7 @@ export default function AITeamChat({
                 )}
                 {activeMember === 'clair' && (
                   <>
-                    <span className="text-2xl">📋</span>
+                    <span className="text-2xl">👩‍🔬</span>
                     <div>
                       <p className="text-white font-medium">Clair</p>
                       <p className="text-gray-500 text-xs">Doc Manager - Manages documentation</p>
@@ -657,7 +657,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                            activeMember === 'chad' ? '🧑‍💻' :
                            activeMember === 'susan' ? '👩‍💼' :
                            activeMember === 'mike' ? '👷' :
-                           activeMember === 'tiffany' ? '👩‍🎨' : '📋'}
+                           activeMember === 'tiffany' ? '👩‍🎨' : '👩‍🔬'}
                         </div>
                         <p className="text-sm">
                           {activeMember === 'chad'
@@ -701,7 +701,7 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                                       ? '👷'
                                       : activeMember === 'tiffany'
                                         ? '👩‍🎨'
-                                        : '📋'
+                                        : '👩‍🔬'
                             }
                           </div>
                           <div className="flex-1 min-w-0">
