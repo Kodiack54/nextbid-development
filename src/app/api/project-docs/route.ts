@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     let query = supabase
-      .from('dev_project_docs')
+      .from('dev_ai_docs')
       .select('*')
       .eq('project_id', projectId)
       .order('updated_at', { ascending: false });
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // Check if doc exists first
     const { data: existing } = await supabase
-      .from('dev_project_docs')
+      .from('dev_ai_docs')
       .select('id')
       .eq('project_id', project_id)
       .eq('doc_type', doc_type)
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       // Update existing doc
       const result = await supabase
-        .from('dev_project_docs')
+        .from('dev_ai_docs')
         .update({
           content,
           updated_at: new Date().toISOString(),
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Insert new doc
       const result = await supabase
-        .from('dev_project_docs')
+        .from('dev_ai_docs')
         .insert({
           project_id,
           doc_type,

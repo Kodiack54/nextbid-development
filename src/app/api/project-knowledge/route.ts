@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     }
 
     let query = supabase
-      .from('dev_project_knowledge')
+      .from('dev_ai_knowledge')
       .select('*')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: item, error } = await supabase
-      .from('dev_project_knowledge')
+      .from('dev_ai_knowledge')
       .insert({
         project_id,
         knowledge_type,
@@ -103,7 +103,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { error } = await supabase
-      .from('dev_project_knowledge')
+      .from('dev_ai_knowledge')
       .delete()
       .eq('id', id);
 
