@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next';
+import pkg from './package.json';
 
 const nextConfig: NextConfig = {
+  env: {
+    BUILD_VERSION: pkg.version,
+    BUILD_TIME: new Date().toISOString(),
+  },
   // Allow connections from gateway
   async headers() {
     return [

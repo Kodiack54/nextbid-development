@@ -1,10 +1,11 @@
 {
   "name": "dev-studio-5000",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev -p 5000",
-    "build": "next build",
+    "build": "node scripts/increment-build.js && next build",
+    "build:quick": "next build",
     "start": "next start -p 5000",
     "lint": "next lint",
     "terminal": "node terminal-server.js",

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { UserProvider } from './contexts/UserContext';
+import { BuildVersion } from '@/components/BuildVersion';
 
 export const metadata: Metadata = {
   title: "Kodiack Studio's",
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className="bg-gray-900 text-white antialiased">
         <UserProvider>
           {children}
+          <BuildVersion />
         </UserProvider>
       </body>
     </html>
