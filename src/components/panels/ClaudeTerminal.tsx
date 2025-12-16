@@ -396,24 +396,10 @@ export function ClaudeTerminal({
       }
       return;
     }
-    console.log('[ClaudeTerminal] Sending input:', JSON.stringify(inputValue), 'length:', inputValue.length);
+    console.log('[ClaudeTerminal] Sending input:', inputValue);
 
-    // Echo input locally so user sees what they typed
-    if (xtermRef.current) {
-      xtermRef.current.writeln(`\x1b[36m> ${inputValue}\x1b[0m`);
-    }
-
-    // Send Ctrl+U to clear line, Ctrl+C to cancel, then type fresh
-    socketRef.current.emit('input', '\x15\x03');
-
-    // Wait a moment, then send the message with Enter
-    setTimeout(() => {
-      if (socketRef.current?.connected) {
-        // Send message + double Enter
-        socketRef.current.emit('input', inputValue + '\r\r');
-      }
-    }, 150);
-
+    // Just send the message with Enter - keep it simple
+    socketRef.current.emit('input', inputValue + '\r');
     setInputValue('');
   }, [inputValue]);
 
