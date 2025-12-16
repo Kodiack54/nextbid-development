@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Power, PowerOff, FolderOpen, Brain } from 'lucide-react';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import type { Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { useUser } from '@/app/contexts/UserContext';
 
@@ -15,8 +16,6 @@ import {
   DEV_DROPLET,
   BRIEFING_FALLBACK_MS,
   cleanAnsiCodes,
-  sendChunkedMessage,
-  sendMultipleEnters,
   useSusanBriefing,
   buildContextPrompt,
   useChadTranscription,
@@ -35,7 +34,7 @@ export function ClaudeTerminal({
   onConnectionChange,
 }: ClaudeTerminalProps) {
   const { user } = useUser();
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -67,8 +66,18 @@ export function ClaudeTerminal({
 
   // Expose send function via ref for external use
   const sendMessage = useCallback((message: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      sendChunkedMessage(wsRef.current, message);
+    if (socketRef.current?.connected) {
+      // Send message in chunks if needed
+      const CHUNK_SIZE = 1024;
+      if (message.length > CHUNK_SIZE) {
+        for (let i = 0; i < message.length; i += CHUNK_SIZE) {
+          const chunk = message.slice(i, i + CHUNK_SIZE);
+          socketRef.current.emit('input', chunk);
+        }
+        socketRef.current.emit('input', '\r');
+      } else {
+        socketRef.current.emit('input', message + '\r');
+      }
     }
   }, []);
 
@@ -170,7 +179,7 @@ export function ClaudeTerminal({
   }, []);
 
   const connect = useCallback(async () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (socketRef.current?.connected) return;
 
     setConnecting(true);
     contextSentRef.current = false;
@@ -178,17 +187,27 @@ export function ClaudeTerminal({
     const contextPromise = fetchSusanContext();
     // connectToChad(); // DISABLED - causing terminal freeze
 
-    const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
-    const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
-    const ws = new WebSocket(fullUrl);
+    // Dynamic import of socket.io-client
+    const { io } = await import('socket.io-client');
 
-    ws.onopen = async () => {
-      console.log('[ClaudeTerminal] WebSocket OPEN - readyState:', ws.readyState);
+    const serverUrl = wsUrl?.replace('ws://', 'http://').replace('wss://', 'https://') || `http://${DEV_DROPLET}:5400`;
+
+    console.log('[ClaudeTerminal] Connecting via Socket.IO to:', serverUrl);
+
+    const socket = io(serverUrl, {
+      query: { path: projectPath },
+      transports: ['polling', 'websocket'], // Start with polling, upgrade to websocket
+      upgrade: true,
+      rememberUpgrade: true,
+    });
+
+    socket.on('connect', async () => {
+      console.log('[ClaudeTerminal] Socket.IO connected via:', socket.io.engine.transport.name);
       setConnected(true);
       setConnecting(false);
 
       if (xtermRef.current) {
-        xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
+        xtermRef.current.writeln('\x1b[32m[Connected via ' + socket.io.engine.transport.name + ']\x1b[0m');
         xtermRef.current.writeln('');
         xtermRef.current.writeln('\x1b[36m☕ Hold please... your master coder will be right with you.\x1b[0m');
         xtermRef.current.writeln('\x1b[90m   Starting Claude Code...\x1b[0m');
@@ -216,16 +235,12 @@ export function ClaudeTerminal({
       }
 
       if (fitAddonRef.current && xtermRef.current) {
-        ws.send(JSON.stringify({
-          type: 'resize',
-          cols: xtermRef.current.cols,
-          rows: xtermRef.current.rows
-        }));
+        socket.emit('resize', { cols: xtermRef.current.cols, rows: xtermRef.current.rows });
       }
 
       setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data: 'claude\r' }));
+        if (socket.connected) {
+          socket.emit('input', 'claude\r');
         }
       }, 2000);
 
@@ -237,11 +252,10 @@ export function ClaudeTerminal({
           claudeLoaded: claudeCodeLoadedRef.current,
           hasContext: !!ctx,
           hasGreeting: !!ctx?.greeting,
-          wsState: ws.readyState,
-          wsOpen: ws.readyState === WebSocket.OPEN
+          socketConnected: socket.connected
         });
         // Only send fallback if Claude Code TUI has actually loaded
-        if (!contextSentRef.current && ctx?.greeting && ws.readyState === WebSocket.OPEN && claudeCodeLoadedRef.current) {
+        if (!contextSentRef.current && ctx?.greeting && socket.connected && claudeCodeLoadedRef.current) {
           console.log('[ClaudeTerminal] Fallback timer: sending Susan briefing');
           contextSentRef.current = true;
           briefingSentToClaudeRef.current = true;
@@ -251,117 +265,111 @@ export function ClaudeTerminal({
           }
 
           const contextMessage = buildContextPrompt(ctx);
-          sendChunkedMessage(ws, contextMessage, () => {
-            sendMultipleEnters(ws);
-          });
+          socket.emit('input', contextMessage + '\r');
         }
       }, BRIEFING_FALLBACK_MS);
 
       // Focus input box when connected
       setTimeout(() => inputRef.current?.focus(), 100);
-    };
+    });
 
-    ws.onmessage = (event) => {
-      console.log('[ClaudeTerminal] WebSocket message received:', event.data?.slice?.(0, 100) || event.data);
-      try {
-        const msg = JSON.parse(event.data);
-        console.log('[ClaudeTerminal] Parsed message type:', msg.type, 'data length:', msg.data?.length || 0);
-        if (msg.type === 'output' && xtermRef.current) {
-          // Display in terminal
-          xtermRef.current.write(msg.data);
-          xtermRef.current.scrollToBottom();
+    // Log transport upgrades
+    socket.io.engine.on('upgrade', (transport: { name: string }) => {
+      console.log('[ClaudeTerminal] Transport upgraded to:', transport.name);
+      if (xtermRef.current) {
+        xtermRef.current.writeln(`\x1b[90m[Upgraded to ${transport.name}]\x1b[0m`);
+      }
+    });
 
-          // Send to Chad for transcription/logging
-          // sendToChad(msg.data); // DISABLED - causing terminal freeze
+    socket.on('output', (data: string) => {
+      console.log('[ClaudeTerminal] Received output:', data.length, 'bytes');
+      if (xtermRef.current) {
+        // Display in terminal
+        xtermRef.current.write(data);
+        xtermRef.current.scrollToBottom();
 
-          // Clean for detection only (not for chat anymore)
-          const cleanData = cleanAnsiCodes(msg.data);
+        // Clean for detection only (not for chat anymore)
+        const cleanData = cleanAnsiCodes(data);
 
-          // Detect when Claude Code TUI has loaded (not just bash)
-          if (!claudeCodeLoadedRef.current) {
-            const hasClaudeUI = cleanData.includes('Claude Code') ||
-                               cleanData.includes('Opus') ||
-                               cleanData.includes('What would you like') ||
-                               cleanData.includes('How can I help') ||
-                               cleanData.includes('❯');
-            if (hasClaudeUI) {
-              claudeCodeLoadedRef.current = true;
-              console.log('[ClaudeTerminal] Claude Code TUI detected');
-            }
+        // Detect when Claude Code TUI has loaded (not just bash)
+        if (!claudeCodeLoadedRef.current) {
+          const hasClaudeUI = cleanData.includes('Claude Code') ||
+                             cleanData.includes('Opus') ||
+                             cleanData.includes('What would you like') ||
+                             cleanData.includes('How can I help') ||
+                             cleanData.includes('❯');
+          if (hasClaudeUI) {
+            claudeCodeLoadedRef.current = true;
+            console.log('[ClaudeTerminal] Claude Code TUI detected');
           }
-
-          // Detect Claude ready and send Susan's briefing
-          const currentContext = susanContextRef.current;
-
-          // Only try to detect ready state if Claude Code TUI is loaded
-          if (!contextSentRef.current && currentContext?.greeting && claudeCodeLoadedRef.current) {
-            const isClaudeReady = cleanData.includes('What would you like') ||
-                                  cleanData.includes('How can I help') ||
-                                  cleanData.includes('What can I help') ||
-                                  cleanData.includes('help you with') ||
-                                  cleanData.includes('work on today') ||
-                                  cleanData.includes('assist you') ||
-                                  /[❯>›»]\s*$/.test(cleanData) ||
-                                  cleanData.includes('❯') ||
-                                  (cleanData.includes('Opus') && cleanData.includes('Claude'));
-
-            if (isClaudeReady) {
-              contextSentRef.current = true;
-              console.log('[ClaudeTerminal] Detected Claude ready prompt, sending Susan briefing');
-
-              if (xtermRef.current) {
-                xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
-              }
-
-              setTimeout(() => {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  const contextMessage = buildContextPrompt(currentContext);
-                  console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
-                  briefingSentToClaudeRef.current = true;
-
-                  sendChunkedMessage(wsRef.current, contextMessage, () => {
-                    sendMultipleEnters(wsRef.current!);
-                  });
-                }
-              }, 500);
-            }
-          }
-        } else if (msg.type === 'exit') {
-          if (xtermRef.current) {
-            xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
-          }
-          setConnected(false);
         }
-      } catch {
-        if (xtermRef.current) {
-          xtermRef.current.write(event.data);
+
+        // Detect Claude ready and send Susan's briefing
+        const currentContext = susanContextRef.current;
+
+        // Only try to detect ready state if Claude Code TUI is loaded
+        if (!contextSentRef.current && currentContext?.greeting && claudeCodeLoadedRef.current) {
+          const isClaudeReady = cleanData.includes('What would you like') ||
+                                cleanData.includes('How can I help') ||
+                                cleanData.includes('What can I help') ||
+                                cleanData.includes('help you with') ||
+                                cleanData.includes('work on today') ||
+                                cleanData.includes('assist you') ||
+                                /[❯>›»]\s*$/.test(cleanData) ||
+                                cleanData.includes('❯') ||
+                                (cleanData.includes('Opus') && cleanData.includes('Claude'));
+
+          if (isClaudeReady) {
+            contextSentRef.current = true;
+            console.log('[ClaudeTerminal] Detected Claude ready prompt, sending Susan briefing');
+
+            if (xtermRef.current) {
+              xtermRef.current.writeln('\x1b[35m\n📚 Sending memory briefing to Claude...\x1b[0m');
+            }
+
+            setTimeout(() => {
+              if (socketRef.current?.connected) {
+                const contextMessage = buildContextPrompt(currentContext);
+                console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
+                briefingSentToClaudeRef.current = true;
+                socketRef.current.emit('input', contextMessage + '\r');
+              }
+            }, 500);
+          }
         }
       }
-    };
+    });
 
-    ws.onerror = (error) => {
-      console.error('[ClaudeTerminal] WebSocket ERROR:', error);
+    socket.on('exit', (code: number) => {
       if (xtermRef.current) {
-        xtermRef.current.writeln('\x1b[31m[Connection error]\x1b[0m');
+        xtermRef.current.writeln(`\x1b[33m[Process exited: ${code}]\x1b[0m`);
+      }
+      setConnected(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('[ClaudeTerminal] Socket.IO connect error:', error);
+      if (xtermRef.current) {
+        xtermRef.current.writeln(`\x1b[31m[Connection error: ${error.message}]\x1b[0m`);
       }
       setConnecting(false);
-    };
+    });
 
-    ws.onclose = (event) => {
-      console.log('[ClaudeTerminal] WebSocket CLOSE - code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean);
+    socket.on('disconnect', (reason) => {
+      console.log('[ClaudeTerminal] Socket.IO disconnected:', reason);
       setConnected(false);
       setConnecting(false);
       if (xtermRef.current) {
-        xtermRef.current.writeln('\x1b[33m[Disconnected]\x1b[0m');
+        xtermRef.current.writeln(`\x1b[33m[Disconnected: ${reason}]\x1b[0m`);
       }
-    };
+    });
 
-    wsRef.current = ws;
+    socketRef.current = socket;
   }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, susanContextRef]);
 
   const disconnect = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
+    socketRef.current?.disconnect();
+    socketRef.current = null;
     disconnectChad();
     setConnected(false);
     resetSusan();
@@ -379,12 +387,12 @@ export function ClaudeTerminal({
   // Send input to terminal
   const sendInput = useCallback(() => {
     if (!inputValue.trim()) return;
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('[ClaudeTerminal] Cannot send - WebSocket not connected');
+    if (!socketRef.current?.connected) {
+      console.error('[ClaudeTerminal] Cannot send - not connected');
       return;
     }
     console.log('[ClaudeTerminal] Sending input:', inputValue);
-    wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\r' }));
+    socketRef.current.emit('input', inputValue + '\r');
     setInputValue('');
   }, [inputValue]);
 
