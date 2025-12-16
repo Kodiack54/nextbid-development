@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowLeft, Server, ChevronRight, Settings } from 'lucide-react';
+import { Plus, ArrowLeft, Server, ChevronRight, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import { Project, TabType, TABS } from './types';
 import ProjectHeader from './components/ProjectHeader';
 import ProjectTabs from './components/ProjectTabs';
@@ -74,6 +74,37 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
     fetchProjects();
     onProjectsChange?.();
     handleFormClose();
+  };
+
+  // Move project up or down in the list
+  const handleMoveProject = async (projectId: string, direction: 'up' | 'down') => {
+    const currentIndex = projects.findIndex(p => p.id === projectId);
+    if (currentIndex === -1) return;
+
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (swapIndex < 0 || swapIndex >= projects.length) return;
+
+    const currentProject = projects[currentIndex];
+    const swapProject = projects[swapIndex];
+
+    try {
+      await Promise.all([
+        fetch('/api/projects', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentProject.id, sort_order: swapProject.sort_order }),
+        }),
+        fetch('/api/projects', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: swapProject.id, sort_order: currentProject.sort_order }),
+        }),
+      ]);
+      fetchProjects();
+      onProjectsChange?.();
+    } catch (error) {
+      console.error('Error moving project:', error);
+    }
   };
 
   const renderTabContent = () => {
@@ -195,13 +226,33 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
         </div>
       ) : (
         <div className="flex-1 overflow-auto space-y-2">
-          {projects.map(project => (
+          {projects.map((project, index) => (
             <div
               key={project.id}
               onClick={() => handleSelectProject(project)}
               className="p-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500 rounded cursor-pointer group transition-colors"
             >
               <div className="flex items-start gap-3">
+                {/* Move buttons */}
+                <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveProject(project.id, 'up'); }}
+                    disabled={index === 0}
+                    className={`p-0.5 rounded ${index === 0 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-700'}`}
+                    title="Move up"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveProject(project.id, 'down'); }}
+                    disabled={index === projects.length - 1}
+                    className={`p-0.5 rounded ${index === projects.length - 1 ? 'text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-700'}`}
+                    title="Move down"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+
                 {/* Logo/Initial */}
                 {project.logo_url ? (
                   <img src={project.logo_url} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
