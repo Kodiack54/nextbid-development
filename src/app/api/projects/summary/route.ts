@@ -134,19 +134,17 @@ async function getProjectSummary(projectPath: string): Promise<ProjectSummary> {
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath),
 
-    // Bugs (if table exists)
+    // Bugs
     supabase
       .from('dev_ai_bugs')
       .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath)
-      .catch(() => ({ count: 0 })),
+      .eq('project_path', projectPath),
 
-    // Code changes (if table exists)
+    // Code changes
     supabase
       .from('dev_ai_code_changes')
       .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath)
-      .catch(() => ({ count: 0 })),
+      .eq('project_path', projectPath),
 
     // Last activity
     supabase
