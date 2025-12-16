@@ -10,6 +10,37 @@ const supabase = createClient(
 
 const PROJECTS_BASE_PATH = '/var/www/NextBid_Dev';
 
+// Rate limiting for OpenAI calls
+let lastCallTime = 0;
+const MIN_DELAY_MS = 2000; // 2 seconds between calls
+const MAX_RETRIES = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function rateLimitedFetch(url: string, options: RequestInit, retries = 0): Promise<Response> {
+  // Ensure minimum delay between calls
+  const now = Date.now();
+  const timeSinceLastCall = now - lastCallTime;
+  if (timeSinceLastCall < MIN_DELAY_MS) {
+    await sleep(MIN_DELAY_MS - timeSinceLastCall);
+  }
+
+  lastCallTime = Date.now();
+  const response = await fetch(url, options);
+
+  // Handle rate limit errors with exponential backoff
+  if (response.status === 429 && retries < MAX_RETRIES) {
+    const backoffMs = Math.pow(2, retries + 1) * 1000; // 2s, 4s, 8s
+    console.log(`[DocWorker] Rate limited, backing off ${backoffMs}ms (retry ${retries + 1}/${MAX_RETRIES})`);
+    await sleep(backoffMs);
+    return rateLimitedFetch(url, options, retries + 1);
+  }
+
+  return response;
+}
+
 interface ExtractedInfo {
   decisions: string[];
   todos: string[];
@@ -48,8 +79,8 @@ async function extractInfoFromMessages(messages: any[]): Promise<ExtractedInfo> 
     };
   }
 
-  // Use OpenAI for background busy work (cost effective)
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  // Use OpenAI for background busy work (cost effective) - with rate limiting
+  const response = await rateLimitedFetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
