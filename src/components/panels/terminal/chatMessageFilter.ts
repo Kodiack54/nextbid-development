@@ -14,12 +14,14 @@ export function cleanAnsiCodes(data: string): string {
     .replace(/\x1b\[[0-9;]*[JK]/g, '')
     // Strip cursor visibility/mode sequences
     .replace(/\x1b\[\?[0-9;]*[hl]/g, '')
+    // Strip character set designators (G0/G1) - causes (B to appear
+    .replace(/\x1b[()][AB0-2]/g, '')
     // Strip OSC sequences (title bar, etc) - ends with BEL or ST
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
     // Strip remaining OSC that might not be properly terminated
     .replace(/\x1b\][^\x07]*\x07/g, '')
-    // DON'T strip all \x1b - that breaks legitimate characters
-    // DON'T strip control chars 0x00-0x1F blanket - breaks formatting
+    // Strip any remaining escape sequences we might have missed
+    .replace(/\x1b[^[]\S?/g, '')
     // Strip carriage returns (keep newlines)
     .replace(/\r(?!\n)/g, '')
     // Collapse multiple blank lines
@@ -101,8 +103,14 @@ export function shouldFilterLine(trimmed: string): boolean {
   if (trimmed.includes('Thinking') || trimmed.includes('Ideating')) return true;
   if (trimmed.includes('Thought for')) return true;
   if (trimmed.includes('ctrl+o to show')) return true;
+  if (trimmed.includes('ctrl+o to expand')) return true;
+  if (trimmed.includes('ctrl-g to edit')) return true;
   if (trimmed.includes('Using tool:')) return true;
   if (trimmed.includes('for shortcuts')) return true;
+  if (trimmed.includes('Crunching')) return true;
+  if (trimmed.includes('accept edits on')) return true;
+  if (trimmed.includes('shift+tab to cycle')) return true;
+  if (trimmed.includes('⏵⏵')) return true;
 
   // Pass/queue spam
   if (trimmed.includes('/passes')) return true;
