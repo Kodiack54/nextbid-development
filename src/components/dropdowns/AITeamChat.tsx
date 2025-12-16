@@ -11,7 +11,7 @@ interface ChatMessage {
   created_at: string;
 }
 
-type AITeamMember = 'claude' | 'chad' | 'susan';
+type AITeamMember = 'ryan' | 'chad' | 'susan' | 'mike' | 'tiffany' | 'clair';
 
 interface NotepadTab {
   id: string;
@@ -59,7 +59,7 @@ export default function AITeamChat({
   userName = 'Boss',
 }: AITeamChatProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeMember, setActiveMember] = useState<AITeamMember>('claude');
+  const [activeMember, setActiveMember] = useState<AITeamMember>('chad');
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
@@ -91,11 +91,12 @@ export default function AITeamChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Get current messages based on active member
-  const messages = activeMember === 'claude'
-    ? claudeMessages
-    : activeMember === 'chad'
-      ? chadMessages
-      : susanMessages;
+  // Only Chad and Susan have real message stores - others are placeholders for now
+  const messages = activeMember === 'chad'
+    ? chadMessages
+    : activeMember === 'susan'
+      ? susanMessages
+      : []; // Ryan, Mike, Tiffany, Clair don't have messages yet
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -245,12 +246,7 @@ export default function AITeamChat({
     const messageContent = newMessage.trim();
     setNewMessage('');
 
-    if (activeMember === 'claude') {
-      // Send to Claude terminal
-      if (onSendToClaudeTerminal) {
-        onSendToClaudeTerminal(messageContent);
-      }
-    } else if (activeMember === 'chad') {
+    if (activeMember === 'chad') {
       // Send to Chad API
       if (onSendToChad) {
         setIsTyping(true);
@@ -271,6 +267,7 @@ export default function AITeamChat({
         }
       }
     }
+    // Ryan, Mike, Tiffany, Clair - messages logged for Chad to relay later
   }
 
   function formatTime(dateStr: string) {
@@ -351,33 +348,22 @@ export default function AITeamChat({
               <div className="p-2">
                 <p className="text-gray-500 text-xs font-semibold uppercase px-2 mb-1">AI Team</p>
 
-                {/* Claude - green when online, grey when offline. Click to connect if offline */}
+                {/* Ryan - Project Manager */}
                 <button
-                  onClick={() => {
-                    setActiveMember('claude');
-                    // If Claude is offline and we have a connect handler, trigger it
-                    if (!claudeConnected && onConnectClaude) {
-                      onConnectClaude();
-                    }
-                  }}
+                  onClick={() => setActiveMember('ryan')}
                   className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors ${
-                    activeMember === 'claude'
-                      ? claudeConnected
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-600 text-white'
+                    activeMember === 'ryan'
+                      ? 'bg-orange-600 text-white'
                       : 'text-gray-300 hover:bg-gray-800'
                   }`}
-                  title={claudeConnected ? 'Claude is online' : 'Click to connect Claude'}
                 >
                   <div className="relative text-xl">
-                    👨‍💻
-                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-900 ${
-                      claudeConnected ? 'bg-green-500' : 'bg-gray-500'
-                    }`} />
+                    👨‍💼
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-gray-500 border-2 border-gray-900" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="block truncate font-medium">Claude</span>
-                    <span className="block truncate text-xs opacity-60">{claudeConnected ? 'Online' : 'Click to connect'}</span>
+                    <span className="block truncate font-medium">Ryan</span>
+                    <span className="block truncate text-xs opacity-60">Project Mgr</span>
                   </div>
                 </button>
 
@@ -419,6 +405,63 @@ export default function AITeamChat({
                   </div>
                 </button>
 
+                {/* Mike */}
+                <button
+                  onClick={() => setActiveMember('mike')}
+                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors mt-1 ${
+                    activeMember === 'mike'
+                      ? 'bg-teal-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  <div className="relative text-xl">
+                    👷
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-gray-500 border-2 border-gray-900" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate font-medium">Mike</span>
+                    <span className="block truncate text-xs opacity-60">Port 5405</span>
+                  </div>
+                </button>
+
+                {/* Tiffany */}
+                <button
+                  onClick={() => setActiveMember('tiffany')}
+                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors mt-1 ${
+                    activeMember === 'tiffany'
+                      ? 'bg-pink-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  <div className="relative text-xl">
+                    👩‍🎨
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-gray-500 border-2 border-gray-900" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate font-medium">Tiffany</span>
+                    <span className="block truncate text-xs opacity-60">Port 5404</span>
+                  </div>
+                </button>
+
+                {/* Clair */}
+                <button
+                  onClick={() => setActiveMember('clair')}
+                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm transition-colors mt-1 ${
+                    activeMember === 'clair'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  <div className="relative text-xl">
+                    📋
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-gray-900" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate font-medium">Clair</span>
+                    <span className="block truncate text-xs opacity-60">Doc Manager</span>
+                  </div>
+                </button>
+
                 {/* Notepad Toggle */}
                 <div className="border-t border-gray-700 mt-2 pt-2">
                   <button
@@ -443,11 +486,9 @@ export default function AITeamChat({
                 <div className="text-xs text-gray-500 px-2">
                   <div>👤 {userName}</div>
                   <div className="mt-1 text-[10px]">
-                    {activeMember === 'claude'
-                      ? '💰 Uses subscription'
-                      : activeMember === 'chad'
-                        ? '💰 ~$0.001/msg'
-                        : '💰 ~$0.001/msg'
+                    {(activeMember === 'chad' || activeMember === 'susan')
+                      ? '💰 ~$0.001/msg'
+                      : '💬 Relayed by Chad'
                     }
                   </div>
                 </div>
@@ -480,22 +521,12 @@ export default function AITeamChat({
                 </div>
               ) : (
                 <div className="px-4 py-2 border-b border-gray-700 flex items-center gap-3 flex-shrink-0">
-                {activeMember === 'claude' && (
+                {activeMember === 'ryan' && (
                   <>
-                    <span className="text-2xl">👨‍💻</span>
+                    <span className="text-2xl">👨‍💼</span>
                     <div>
-                      <p className="text-white font-medium">Claude - <span className="text-purple-400">[Internal Gateway]</span></p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-gray-500">Lead Programmer</span>
-                        <span className={`px-1.5 py-0.5 rounded ${claudeConnected ? 'bg-green-900/50 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
-                          {claudeConnected ? 'Connected' : 'Disconnected'}
-                        </span>
-                        {externalClaudeConnected && (
-                          <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">
-                            External
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-white font-medium">Ryan</p>
+                      <p className="text-gray-500 text-xs">Project Manager - Coming soon</p>
                     </div>
                   </>
                 )}
@@ -514,6 +545,33 @@ export default function AITeamChat({
                     <div>
                       <p className="text-white font-medium">Susan</p>
                       <p className="text-gray-500 text-xs">Librarian - Catalogs knowledge & asks questions</p>
+                    </div>
+                  </>
+                )}
+                {activeMember === 'mike' && (
+                  <>
+                    <span className="text-2xl">👷</span>
+                    <div>
+                      <p className="text-white font-medium">Mike</p>
+                      <p className="text-gray-500 text-xs">Port 5405 - Coming soon</p>
+                    </div>
+                  </>
+                )}
+                {activeMember === 'tiffany' && (
+                  <>
+                    <span className="text-2xl">👩‍🎨</span>
+                    <div>
+                      <p className="text-white font-medium">Tiffany</p>
+                      <p className="text-gray-500 text-xs">Port 5404 - Coming soon</p>
+                    </div>
+                  </>
+                )}
+                {activeMember === 'clair' && (
+                  <>
+                    <span className="text-2xl">📋</span>
+                    <div>
+                      <p className="text-white font-medium">Clair</p>
+                      <p className="text-gray-500 text-xs">Doc Manager - Manages documentation</p>
                     </div>
                   </>
                 )}
@@ -595,16 +653,18 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                     {messages.length === 0 && (
                       <div className="text-center text-gray-500 py-8">
                         <div className="text-3xl mb-2">
-                          {activeMember === 'claude' ? '👨‍💻' : activeMember === 'chad' ? '🧑‍💻' : '👩‍💼'}
+                          {activeMember === 'ryan' ? '👨‍💼' :
+                           activeMember === 'chad' ? '🧑‍💻' :
+                           activeMember === 'susan' ? '👩‍💼' :
+                           activeMember === 'mike' ? '👷' :
+                           activeMember === 'tiffany' ? '👩‍🎨' : '📋'}
                         </div>
                         <p className="text-sm">
-                          {activeMember === 'claude'
-                            ? claudeConnected
-                              ? 'Claude is ready. Send a message!'
-                              : 'Connect to Claude terminal first'
-                            : activeMember === 'chad'
-                              ? 'Chad is ready for quick tasks!'
-                              : 'Susan is ready to help organize knowledge!'
+                          {activeMember === 'chad'
+                            ? 'Chad is ready for quick tasks!'
+                            : activeMember === 'susan'
+                              ? 'Susan is ready to help organize knowledge!'
+                              : `${activeMember.charAt(0).toUpperCase() + activeMember.slice(1)} - Coming soon! Messages will be relayed by Chad.`
                           }
                         </p>
                       </div>
@@ -617,19 +677,31 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
                             isUser
                               ? 'bg-gray-600'
-                              : activeMember === 'claude'
+                              : activeMember === 'ryan'
                                 ? 'bg-orange-900/50'
                                 : activeMember === 'chad'
                                   ? 'bg-blue-900/50'
-                                  : 'bg-purple-900/50'
+                                  : activeMember === 'susan'
+                                    ? 'bg-purple-900/50'
+                                    : activeMember === 'mike'
+                                      ? 'bg-teal-900/50'
+                                      : activeMember === 'tiffany'
+                                        ? 'bg-pink-900/50'
+                                        : 'bg-indigo-900/50'
                           }`}>
                             {isUser
                               ? '👤'
-                              : activeMember === 'claude'
-                                ? '👨‍💻'
+                              : activeMember === 'ryan'
+                                ? '👨‍💼'
                                 : activeMember === 'chad'
                                   ? '🧑‍💻'
-                                  : '👩‍💼'
+                                  : activeMember === 'susan'
+                                    ? '👩‍💼'
+                                    : activeMember === 'mike'
+                                      ? '👷'
+                                      : activeMember === 'tiffany'
+                                        ? '👩‍🎨'
+                                        : '📋'
                             }
                           </div>
                           <div className="flex-1 min-w-0">
@@ -726,20 +798,26 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                           e.preventDefault();
                         }}
                         placeholder={
-                          activeMember === 'claude'
-                            ? claudeConnected ? 'Message Claude... (Shift+Enter for new line)' : 'Connect terminal first'
-                            : activeMember === 'chad'
-                              ? 'Message Chad...'
-                              : 'Message Susan...'
+                          activeMember === 'chad'
+                            ? 'Message Chad...'
+                            : activeMember === 'susan'
+                              ? 'Message Susan...'
+                              : `Message ${activeMember.charAt(0).toUpperCase() + activeMember.slice(1)}... (Chad will relay)`
                         }
-                        disabled={activeMember === 'claude' && !claudeConnected}
+                        disabled={false}
                         rows={4}
                         className={`flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50 focus:ring-2 resize-y min-h-[80px] ${
-                          activeMember === 'claude'
+                          activeMember === 'ryan'
                             ? 'focus:ring-orange-500'
                             : activeMember === 'chad'
                               ? 'focus:ring-blue-500'
-                              : 'focus:ring-purple-500'
+                              : activeMember === 'susan'
+                                ? 'focus:ring-purple-500'
+                                : activeMember === 'mike'
+                                  ? 'focus:ring-teal-500'
+                                  : activeMember === 'tiffany'
+                                    ? 'focus:ring-pink-500'
+                                    : 'focus:ring-indigo-500'
                         }`}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
@@ -750,13 +828,19 @@ git pull && npm run build && pm2 restart dev-studio-5000"
                       />
                       <button
                         onClick={sendMessage}
-                        disabled={!newMessage.trim() || (activeMember === 'claude' && !claudeConnected)}
+                        disabled={!newMessage.trim()}
                         className={`p-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          activeMember === 'claude'
+                          activeMember === 'ryan'
                             ? 'bg-orange-600 hover:bg-orange-700'
                             : activeMember === 'chad'
                               ? 'bg-blue-600 hover:bg-blue-700'
-                              : 'bg-purple-600 hover:bg-purple-700'
+                              : activeMember === 'susan'
+                                ? 'bg-purple-600 hover:bg-purple-700'
+                                : activeMember === 'mike'
+                                  ? 'bg-teal-600 hover:bg-teal-700'
+                                  : activeMember === 'tiffany'
+                                    ? 'bg-pink-600 hover:bg-pink-700'
+                                    : 'bg-indigo-600 hover:bg-indigo-700'
                         }`}
                       >
                         <Send className="w-4 h-4" />

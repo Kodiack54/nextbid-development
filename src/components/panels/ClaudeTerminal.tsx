@@ -13,13 +13,7 @@ import {
   type ConversationMessage,
   type ClaudeTerminalProps,
   DEV_DROPLET,
-  CHAT_DEBOUNCE_MS,
-  MIN_CONTENT_LENGTH,
-  DEDUP_COOLDOWN_MS,
   BRIEFING_FALLBACK_MS,
-  POST_BRIEFING_DELAY_MS,
-  filterForChat,
-  shouldFilterContent,
   cleanAnsiCodes,
   sendChunkedMessage,
   sendMultipleEnters,
@@ -70,33 +64,16 @@ export function ClaudeTerminal({
     disconnect: disconnectChad,
   } = useChadTranscription(projectPath, user?.id);
 
-  // Chat buffering refs
-  const responseBufferRef = useRef<string>('');
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const recentMessagesRef = useRef<string[]>([]);
-  const lastMessageTimeRef = useRef<number>(0);
-  const messageHashesRef = useRef<Set<string>>(new Set());
+  // Terminal state refs
   const briefingSentToClaudeRef = useRef<boolean>(false);
-  const showedReadyMessageRef = useRef<boolean>(false);
-  const readyToShowMessagesRef = useRef<boolean>(false);
   const claudeCodeLoadedRef = useRef<boolean>(false); // Track when Claude Code TUI is visible
 
-  // Expose send function via ref for external use (AI Team Chat)
+  // Expose send function via ref for external use
   const sendMessage = useCallback((message: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       sendChunkedMessage(wsRef.current, message);
-
-      if (onConversationMessage) {
-        onConversationMessage({
-          id: `user-${Date.now()}`,
-          user_id: 'me',
-          user_name: 'You',
-          content: message,
-          created_at: new Date().toISOString(),
-        });
-      }
     }
-  }, [onConversationMessage]);
+  }, []);
 
   // Expose send function via ref
   useEffect(() => {
@@ -212,16 +189,6 @@ export function ClaudeTerminal({
       setConnected(true);
       setConnecting(false);
 
-      if (onConversationMessage) {
-        onConversationMessage({
-          id: `claude-${Date.now()}`,
-          user_id: 'claude',
-          user_name: 'Claude',
-          content: 'Be right there, gathering my thoughts... 🧠',
-          created_at: new Date().toISOString(),
-        });
-      }
-
       if (xtermRef.current) {
         xtermRef.current.writeln('\x1b[32m[Connected]\x1b[0m');
         xtermRef.current.writeln('');
@@ -287,12 +254,7 @@ export function ClaudeTerminal({
 
           const contextMessage = buildContextPrompt(ctx);
           sendChunkedMessage(ws, contextMessage, () => {
-            sendMultipleEnters(ws, () => {
-              setTimeout(() => {
-                readyToShowMessagesRef.current = true;
-                console.log('[ClaudeTerminal] Ready to show chat messages (fallback)');
-              }, POST_BRIEFING_DELAY_MS);
-            });
+            sendMultipleEnters(ws);
           });
         }
       }, BRIEFING_FALLBACK_MS);
@@ -304,10 +266,14 @@ export function ClaudeTerminal({
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output' && xtermRef.current) {
+          // Display in terminal
           xtermRef.current.write(msg.data);
           xtermRef.current.scrollToBottom();
+
+          // Send to Chad for transcription/logging
           sendToChad(msg.data);
 
+          // Clean for detection only (not for chat anymore)
           const cleanData = cleanAnsiCodes(msg.data);
 
           // Detect when Claude Code TUI has loaded (not just bash)
@@ -325,17 +291,6 @@ export function ClaudeTerminal({
 
           // Detect Claude ready and send Susan's briefing
           const currentContext = susanContextRef.current;
-
-          // Log detection state periodically
-          if (!contextSentRef.current && cleanData.length > 10) {
-            console.log('[ClaudeTerminal] Detection state:', {
-              contextSent: contextSentRef.current,
-              claudeLoaded: claudeCodeLoadedRef.current,
-              hasContext: !!currentContext,
-              hasGreeting: !!currentContext?.greeting,
-              sample: cleanData.slice(-80)
-            });
-          }
 
           // Only try to detect ready state if Claude Code TUI is loaded
           if (!contextSentRef.current && currentContext?.greeting && claudeCodeLoadedRef.current) {
@@ -364,98 +319,12 @@ export function ClaudeTerminal({
                   briefingSentToClaudeRef.current = true;
 
                   sendChunkedMessage(wsRef.current, contextMessage, () => {
-                    sendMultipleEnters(wsRef.current!, () => {
-                      setTimeout(() => {
-                        readyToShowMessagesRef.current = true;
-                        console.log('[ClaudeTerminal] Ready to show chat messages');
-                      }, POST_BRIEFING_DELAY_MS);
-                    });
+                    sendMultipleEnters(wsRef.current!);
                   });
                 }
               }, 500);
             }
           }
-
-          // Filter and buffer for chat display
-          const filteredContent = filterForChat(msg.data);
-          if (filteredContent) {
-            responseBufferRef.current += filteredContent;
-          }
-
-          // Debounce: send buffered content after output settles
-          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-          debounceTimerRef.current = setTimeout(() => {
-            const content = responseBufferRef.current.trim();
-
-            if (content.length < MIN_CONTENT_LENGTH) {
-              responseBufferRef.current = '';
-              return;
-            }
-
-            if (shouldFilterContent(content)) {
-              responseBufferRef.current = '';
-              return;
-            }
-
-            // Better deduplication using content hash
-            // Simple hash function for quick comparison
-            const simpleHash = (str: string): string => {
-              let hash = 0;
-              const normalized = str.replace(/\s+/g, ' ').trim().toLowerCase();
-              for (let i = 0; i < normalized.length; i++) {
-                const char = normalized.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash; // Convert to 32bit integer
-              }
-              return hash.toString(16);
-            };
-
-            const contentHash = simpleHash(content);
-            const isDuplicate = messageHashesRef.current.has(contentHash);
-
-            const now = Date.now();
-            const tooSoon = now - lastMessageTimeRef.current < DEDUP_COOLDOWN_MS;
-
-            if (!isDuplicate && !tooSoon) {
-              // Add hash and auto-expire after 10 seconds
-              messageHashesRef.current.add(contentHash);
-              setTimeout(() => messageHashesRef.current.delete(contentHash), 10000);
-
-              // Keep recent messages for reference (limit to 10)
-              recentMessagesRef.current.push(content);
-              if (recentMessagesRef.current.length > 10) {
-                recentMessagesRef.current.shift();
-              }
-              lastMessageTimeRef.current = now;
-
-              if (onConversationMessage) {
-                if (!readyToShowMessagesRef.current) {
-                  responseBufferRef.current = '';
-                  return;
-                }
-
-                if (briefingSentToClaudeRef.current && !showedReadyMessageRef.current) {
-                  showedReadyMessageRef.current = true;
-                  onConversationMessage({
-                    id: `claude-ready-${Date.now()}`,
-                    user_id: 'claude',
-                    user_name: 'Claude',
-                    content: "Ready to work! Let's go! 🚀",
-                    created_at: new Date().toISOString(),
-                  });
-                }
-
-                onConversationMessage({
-                  id: `claude-${Date.now()}`,
-                  user_id: 'claude',
-                  user_name: 'Claude',
-                  content: content,
-                  created_at: new Date().toISOString(),
-                });
-              }
-            }
-            responseBufferRef.current = '';
-          }, CHAT_DEBOUNCE_MS);
         } else if (msg.type === 'exit') {
           if (xtermRef.current) {
             xtermRef.current.writeln(`\x1b[33m[Process exited: ${msg.code}]\x1b[0m`);
@@ -485,7 +354,7 @@ export function ClaudeTerminal({
     };
 
     wsRef.current = ws;
-  }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, onConversationMessage, susanContextRef]);
+  }, [projectPath, wsUrl, fetchSusanContext, connectToChad, sendToChad, susanContextRef]);
 
   const disconnect = useCallback(() => {
     wsRef.current?.close();
@@ -494,11 +363,7 @@ export function ClaudeTerminal({
     setConnected(false);
     resetSusan();
     briefingSentToClaudeRef.current = false;
-    showedReadyMessageRef.current = false;
-    readyToShowMessagesRef.current = false;
     claudeCodeLoadedRef.current = false;
-    recentMessagesRef.current = [];
-    responseBufferRef.current = '';
   }, [disconnectChad, resetSusan]);
 
   // Expose connect function via ref
@@ -515,15 +380,6 @@ export function ClaudeTerminal({
       if (currentValue.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
         const text = currentValue.trim();
         sendChunkedMessage(wsRef.current, text);
-        if (onConversationMessage) {
-          onConversationMessage({
-            id: `user-${Date.now()}`,
-            user_id: 'me',
-            user_name: 'You',
-            content: text.length > 500 ? text.slice(0, 500) + `... (${text.length} chars)` : text,
-            created_at: new Date().toISOString(),
-          });
-        }
         setInputValue('');
       } else if (!currentValue.trim() && wsRef.current) {
         sendEnter(wsRef.current);
@@ -543,7 +399,7 @@ export function ClaudeTerminal({
       e.preventDefault();
       sendArrowKey(wsRef.current, 'left');
     }
-  }, [onConversationMessage]);
+  }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pastedText = e.clipboardData.getData('text');
@@ -564,24 +420,43 @@ export function ClaudeTerminal({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       if (inputValue.trim()) {
         sendChunkedMessage(wsRef.current, inputValue);
-        if (onConversationMessage) {
-          const displayContent = inputValue.length > 500
-            ? inputValue.slice(0, 500) + `... (${inputValue.length} chars)`
-            : inputValue.trim();
-          onConversationMessage({
-            id: `user-${Date.now()}`,
-            user_id: 'me',
-            user_name: 'You',
-            content: displayContent,
-            created_at: new Date().toISOString(),
-          });
-        }
       } else {
         sendEnter(wsRef.current);
       }
       setInputValue('');
     }
-  }, [inputValue, onConversationMessage]);
+  }, [inputValue]);
+
+  // Handle direct terminal keystrokes (when clicking on terminal area)
+  const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!connected || !wsRef.current) return;
+
+    // Don't interfere with system shortcuts
+    if (e.metaKey || e.ctrlKey) return;
+
+    e.preventDefault();
+
+    if (e.key === 'Enter') {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
+    } else if (e.key === 'Escape') {
+      sendEscape(wsRef.current);
+    } else if (e.key === 'ArrowUp') {
+      sendArrowKey(wsRef.current, 'up');
+    } else if (e.key === 'ArrowDown') {
+      sendArrowKey(wsRef.current, 'down');
+    } else if (e.key === 'ArrowLeft') {
+      sendArrowKey(wsRef.current, 'left');
+    } else if (e.key === 'ArrowRight') {
+      sendArrowKey(wsRef.current, 'right');
+    } else if (e.key === 'Backspace') {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: '\x7f' }));
+    } else if (e.key === 'Tab') {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: '\t' }));
+    } else if (e.key.length === 1) {
+      // Regular character
+      wsRef.current.send(JSON.stringify({ type: 'input', data: e.key }));
+    }
+  }, [connected]);
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
@@ -590,14 +465,20 @@ export function ClaudeTerminal({
         <div className="flex items-center gap-2">
           <span className="text-base">👨‍💻</span>
           <span className="text-sm font-medium text-white">Claude</span>
-          <span className="text-xs text-orange-400/60">Lead Programmer</span>
-          <span className={`px-1.5 py-0.5 text-xs rounded ${
-            connected ? 'bg-green-600/20 text-green-400' :
-            connecting ? 'bg-yellow-600/20 text-yellow-400' :
-            'bg-gray-700 text-gray-400'
-          }`}>
-            {connected ? 'Connected' : connecting ? 'Connecting...' : 'Disconnected'}
-          </span>
+          <span className="text-xs text-orange-400/60">[Internal Gateway]</span>
+          {/* Connection lights */}
+          <div className="flex items-center gap-1 ml-2">
+            {/* Green = Studio WebSocket connected */}
+            <div
+              className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-600'}`}
+              title={connected ? 'Studio connected' : 'Studio disconnected'}
+            />
+            {/* Blue = MCP bridge connected (from external Claude Code) */}
+            <div
+              className="w-2.5 h-2.5 rounded-full bg-gray-600"
+              title="MCP bridge (coming soon)"
+            />
+          </div>
           {connected && (
             <span className={`flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${
               memoryStatus === 'loaded' ? 'bg-purple-600/20 text-purple-400' :
@@ -638,10 +519,12 @@ export function ClaudeTerminal({
         <span className="truncate">{projectPath}</span>
       </div>
 
-      {/* Terminal output */}
+      {/* Terminal output - click to focus and type directly */}
       <div
         ref={terminalRef}
-        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto"
+        tabIndex={connected ? 0 : -1}
+        onKeyDown={handleTerminalKeyDown}
+        className={`flex-1 min-h-0 overflow-x-auto overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${connected ? 'cursor-text' : ''}`}
         style={{ padding: '8px' }}
       />
 
@@ -668,7 +551,7 @@ export function ClaudeTerminal({
             Send
           </button>
         </div>
-        <p className="text-gray-500 text-xs mt-1 ml-6">Enter to send, Shift+Enter for new line, Escape for TUI navigation</p>
+        <p className="text-gray-500 text-xs mt-1 ml-6">Click terminal to type directly, or use input box for multi-line. Esc for TUI navigation.</p>
       </div>
     </div>
   );
