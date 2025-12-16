@@ -265,7 +265,8 @@ export function ClaudeTerminal({
           }
 
           const contextMessage = buildContextPrompt(ctx);
-          socket.emit('input', contextMessage + '\r');
+          // Need double \r to actually submit in Claude Code
+          socket.emit('input', contextMessage + '\r\r');
         }
       }, BRIEFING_FALLBACK_MS);
 
@@ -332,7 +333,8 @@ export function ClaudeTerminal({
                 const contextMessage = buildContextPrompt(currentContext);
                 console.log('[ClaudeTerminal] Sending context:', contextMessage.slice(0, 100) + '...');
                 briefingSentToClaudeRef.current = true;
-                socketRef.current.emit('input', contextMessage + '\r');
+                // Need double \r to actually submit in Claude Code
+                socketRef.current.emit('input', contextMessage + '\r\r');
               }
             }, 500);
           }
