@@ -1,420 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!
 );
 
-const PROJECTS_BASE_PATH = '/var/www/NextBid_Dev';
-
-// Rate limiting for OpenAI calls
-let lastCallTime = 0;
-const MIN_DELAY_MS = 2000; // 2 seconds between calls
-const MAX_RETRIES = 3;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function rateLimitedFetch(url: string, options: RequestInit, retries = 0): Promise<Response> {
-  // Ensure minimum delay between calls
-  const now = Date.now();
-  const timeSinceLastCall = now - lastCallTime;
-  if (timeSinceLastCall < MIN_DELAY_MS) {
-    await sleep(MIN_DELAY_MS - timeSinceLastCall);
-  }
-
-  lastCallTime = Date.now();
-  const response = await fetch(url, options);
-
-  // Handle rate limit errors with exponential backoff
-  if (response.status === 429 && retries < MAX_RETRIES) {
-    const backoffMs = Math.pow(2, retries + 1) * 1000; // 2s, 4s, 8s
-    console.log(`[DocWorker] Rate limited, backing off ${backoffMs}ms (retry ${retries + 1}/${MAX_RETRIES})`);
-    await sleep(backoffMs);
-    return rateLimitedFetch(url, options, retries + 1);
-  }
-
-  return response;
-}
-
-interface ExtractedInfo {
-  decisions: string[];
-  todos: string[];
-  code_discussed: string[];
-  questions_answered: string[];
-  key_topics: string[];
-  summary: string;
-}
+const CHAD_URL = process.env.CHAD_URL || 'http://localhost:5401';
 
 /**
- * Background Documentation Worker
- * Runs every 5 minutes to:
- * 1. Read recent conversation sessions
- * 2. Extract decisions, todos, code changes
- * 3. Update project documentation automatically
- * 4. Maintain running todo list
+ * DocWorker - Triggers Chad's cataloger to process sessions
+ *
+ * Flow:
+ * 1. Chad dumps sessions to dev_ai_sessions every 30 min
+ * 2. Chad's cataloger extracts knowledge using Claude Haiku
+ * 3. Chad sends extracted data to Susan's /api/catalog
+ * 4. Susan stores todos, knowledge, code changes, etc.
+ * 5. Data appears in the UI's Knowledge, Todos, etc. tabs
+ *
+ * This worker just triggers Chad's cataloger on demand.
+ * Chad already runs the cataloger every 30 min automatically.
  */
 
-async function extractInfoFromMessages(messages: any[]): Promise<ExtractedInfo> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('No OpenAI API key');
-
-  // Build conversation text
-  const conversationText = messages
-    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
-    .join('\n\n');
-
-  if (conversationText.length < 100) {
-    return {
-      decisions: [],
-      todos: [],
-      code_discussed: [],
-      questions_answered: [],
-      key_topics: [],
-      summary: 'Not enough content to summarize',
-    };
-  }
-
-  // Use OpenAI for background busy work (cost effective) - with rate limiting
-  const response = await rateLimitedFetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini', // Use GPT-4o-mini for background tasks (cost effective)
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `Analyze this development conversation and extract key information. Return ONLY valid JSON.
-
-CONVERSATION:
-${conversationText.slice(0, 8000)}
-
-Return this exact JSON structure:
-{
-  "decisions": ["list of decisions made"],
-  "todos": ["action items and tasks to do"],
-  "code_discussed": ["files, functions, or code topics discussed"],
-  "questions_answered": ["questions that were resolved"],
-  "key_topics": ["main topics covered"],
-  "summary": "2-3 sentence summary of what was accomplished"
-}
-
-If a category has nothing, use empty array []. Return ONLY the JSON, no other text.`
-      }],
-    }),
-  });
-
-  if (!response.ok) {
-    console.error('OpenAI API error:', await response.text());
-    return {
-      decisions: [],
-      todos: [],
-      code_discussed: [],
-      questions_answered: [],
-      key_topics: [],
-      summary: 'Failed to analyze conversation',
-    };
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content || '{}';
-
-  try {
-    // Extract JSON from response (handle markdown code blocks)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch (e) {
-    console.error('Failed to parse extraction:', e);
-  }
-
-  return {
-    decisions: [],
-    todos: [],
-    code_discussed: [],
-    questions_answered: [],
-    key_topics: [],
-    summary: text.slice(0, 200),
-  };
-}
-
-async function updateProjectKnowledge(projectId: string, projectPath: string, info: ExtractedInfo) {
-  const docsPath = path.join(projectPath, 'docs');
-
-  // Update running log
-  const today = new Date().toISOString().split('T')[0];
-  const logPath = path.join(docsPath, 'changelog', `${today}-log.md`);
-
-  try {
-    await fs.mkdir(path.join(docsPath, 'changelog'), { recursive: true });
-
-    let existingLog = '';
-    try {
-      existingLog = await fs.readFile(logPath, 'utf-8');
-    } catch {
-      existingLog = `---
-title: "Development Log - ${today}"
-category: "changelog"
-author: "Doc Worker"
-version: "1.0.0"
-created_at: "${new Date().toISOString()}"
-updated_at: "${new Date().toISOString()}"
----
-
-# Development Log - ${today}
-
-`;
-    }
-
-    const timestamp = new Date().toLocaleTimeString();
-    const newEntry = `
-## ${timestamp}
-
-${info.summary}
-
-${info.decisions.length ? '**Decisions:**\n' + info.decisions.map(d => `- ${d}`).join('\n') : ''}
-
-${info.todos.length ? '**Action Items:**\n' + info.todos.map(t => `- [ ] ${t}`).join('\n') : ''}
-
-${info.code_discussed.length ? '**Code Discussed:**\n' + info.code_discussed.map(c => `- \`${c}\``).join('\n') : ''}
-
----
-`;
-
-    // Update the updated_at in front matter
-    const updatedLog = existingLog.replace(
-      /updated_at: "[^"]*"/,
-      `updated_at: "${new Date().toISOString()}"`
-    ) + newEntry;
-
-    await fs.writeFile(logPath, updatedLog);
-    console.log('[DocWorker] Updated daily log:', logPath);
-  } catch (e) {
-    console.error('[DocWorker] Failed to update log:', e);
-  }
-
-  // Update running TODO list
-  if (info.todos.length > 0) {
-    const todoPath = path.join(docsPath, 'notes', 'running-todos.md');
-
-    try {
-      await fs.mkdir(path.join(docsPath, 'notes'), { recursive: true });
-
-      let existingTodos = '';
-      try {
-        existingTodos = await fs.readFile(todoPath, 'utf-8');
-      } catch {
-        existingTodos = `---
-title: "Running TODO List"
-category: "notes"
-author: "Doc Worker"
-version: "1.0.0"
-created_at: "${new Date().toISOString()}"
-updated_at: "${new Date().toISOString()}"
----
-
-# Running TODO List
-
-Items extracted from development conversations.
-
-`;
-      }
-
-      const newTodos = info.todos.map(t => `- [ ] ${t} *(added ${new Date().toLocaleDateString()})*`).join('\n');
-
-      // Increment version
-      const versionMatch = existingTodos.match(/version: "(\d+)\.(\d+)\.(\d+)"/);
-      let newVersion = '1.0.1';
-      if (versionMatch) {
-        const patch = parseInt(versionMatch[3]) + 1;
-        newVersion = `${versionMatch[1]}.${versionMatch[2]}.${patch}`;
-      }
-
-      const updatedTodos = existingTodos
-        .replace(/version: "[^"]*"/, `version: "${newVersion}"`)
-        .replace(/updated_at: "[^"]*"/, `updated_at: "${new Date().toISOString()}"`)
-        + '\n' + newTodos + '\n';
-
-      await fs.writeFile(todoPath, updatedTodos);
-      console.log('[DocWorker] Updated TODO list with', info.todos.length, 'items');
-    } catch (e) {
-      console.error('[DocWorker] Failed to update TODOs:', e);
-    }
-  }
-}
-
-async function markSessionProcessed(sessionId: string) {
-  try {
-    const { error } = await supabase
-      .from('dev_chat_sessions')
-      .update({
-        doc_worker_processed: true,
-        doc_worker_processed_at: new Date().toISOString()
-      })
-      .eq('id', sessionId);
-
-    if (error && error.message.includes('does not exist')) {
-      console.log('[DocWorker] Note: doc_worker_processed column not yet added to database');
-    }
-  } catch (e) {
-    // Column might not exist yet - that's OK
-    console.log('[DocWorker] Could not mark session processed (column may not exist yet)');
-  }
-}
-
 export async function POST(request: NextRequest) {
-  console.log('[DocWorker] Starting background documentation run...');
+  console.log('[DocWorker] Triggering Chad cataloger...');
 
   try {
     const body = await request.json().catch(() => ({}));
-    const forceAll = body.force_all || false;
+    const sessionId = body.session_id;
 
-    // Get recent sessions that haven't been processed
-    let sessions: any[] = [];
-    let sessionsError: any = null;
+    let result;
 
-    // First try with the doc_worker_processed filter (if column exists)
-    if (!forceAll) {
-      const result = await supabase
-        .from('dev_chat_sessions')
-        .select('id, project_id, user_id, started_at')
-        .or('doc_worker_processed.is.null,doc_worker_processed.eq.false')
-        .order('started_at', { ascending: false })
-        .limit(10);
-
-      if (result.error && result.error.message.includes('does not exist')) {
-        // Column doesn't exist yet - just get recent sessions
-        console.log('[DocWorker] Note: doc_worker_processed column not yet added, processing recent sessions');
-        const fallback = await supabase
-          .from('dev_chat_sessions')
-          .select('id, project_id, user_id, started_at')
-          .order('started_at', { ascending: false })
-          .limit(5); // Smaller limit when we can't track processed status
-
-        sessions = fallback.data || [];
-        sessionsError = fallback.error;
-      } else {
-        sessions = result.data || [];
-        sessionsError = result.error;
-      }
-    } else {
-      const result = await supabase
-        .from('dev_chat_sessions')
-        .select('id, project_id, user_id, started_at')
-        .order('started_at', { ascending: false })
-        .limit(10);
-
-      sessions = result.data || [];
-      sessionsError = result.error;
-    }
-
-    if (sessionsError) {
-      console.error('[DocWorker] Error fetching sessions:', sessionsError);
-      return NextResponse.json({ error: sessionsError.message }, { status: 500 });
-    }
-
-    if (!sessions || sessions.length === 0) {
-      console.log('[DocWorker] No new sessions to process');
-      return NextResponse.json({
-        success: true,
-        message: 'No new sessions to process',
-        processed: 0
+    if (sessionId) {
+      // Catalog a specific session
+      console.log('[DocWorker] Cataloging specific session:', sessionId);
+      const response = await fetch(`${CHAD_URL}/api/catalog/session/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
-    }
 
-    console.log('[DocWorker] Found', sessions.length, 'sessions to process');
-
-    let processed = 0;
-    const results: any[] = [];
-
-    for (const session of sessions) {
-      try {
-        // Get messages for this session
-        const { data: messages, error: msgError } = await supabase
-          .from('dev_chat_messages')
-          .select('role, content, created_at')
-          .eq('session_id', session.id)
-          .order('created_at', { ascending: true });
-
-        if (msgError || !messages || messages.length < 2) {
-          console.log('[DocWorker] Skipping session', session.id, '- not enough messages');
-          await markSessionProcessed(session.id);
-          continue;
-        }
-
-        // Get project info
-        const { data: project } = await supabase
-          .from('dev_projects')
-          .select('server_path, name, slug')
-          .eq('id', session.project_id)
-          .single();
-
-        const projectPath = project?.server_path || path.join(PROJECTS_BASE_PATH, 'dev-studio-5000');
-
-        // Extract information from conversation
-        console.log('[DocWorker] Analyzing session', session.id, 'with', messages.length, 'messages');
-        const extracted = await extractInfoFromMessages(messages);
-
-        // Update project documentation
-        await updateProjectKnowledge(session.project_id, projectPath, extracted);
-
-        // Mark session as processed
-        await markSessionProcessed(session.id);
-
-        processed++;
-        results.push({
-          session_id: session.id,
-          project: project?.name || 'unknown',
-          extracted: {
-            decisions: extracted.decisions.length,
-            todos: extracted.todos.length,
-            topics: extracted.key_topics.length,
-          },
-        });
-
-        // Small delay to avoid rate limits
-        await new Promise(r => setTimeout(r, 1000));
-
-      } catch (e: any) {
-        console.error('[DocWorker] Error processing session', session.id, ':', e.message);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[DocWorker] Chad catalog session error:', errorText);
+        return NextResponse.json({ error: errorText }, { status: 500 });
       }
+
+      result = await response.json();
+    } else {
+      // Trigger full catalog cycle
+      console.log('[DocWorker] Triggering full catalog cycle...');
+      const response = await fetch(`${CHAD_URL}/api/catalog/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[DocWorker] Chad catalog trigger error:', errorText);
+        return NextResponse.json({ error: errorText }, { status: 500 });
+      }
+
+      result = await response.json();
     }
 
-    console.log('[DocWorker] Completed. Processed', processed, 'sessions');
+    console.log('[DocWorker] Chad cataloger result:', result);
 
     return NextResponse.json({
       success: true,
-      processed,
-      results,
+      message: sessionId ? 'Session cataloged' : 'Catalog cycle triggered',
+      result,
       timestamp: new Date().toISOString(),
     });
 
   } catch (error: any) {
-    console.error('[DocWorker] Fatal error:', error);
+    console.error('[DocWorker] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// GET endpoint to check worker status
+// GET endpoint to check worker status and recent activity
 export async function GET() {
-  // Check last run time from a status record or just return current state
-  const { data: recentSessions } = await supabase
-    .from('dev_chat_sessions')
-    .select('id, doc_worker_processed, doc_worker_processed_at')
-    .order('doc_worker_processed_at', { ascending: false })
-    .limit(5);
+  try {
+    // Check Chad's health
+    let chadStatus = 'unknown';
+    try {
+      const chadHealth = await fetch(`${CHAD_URL}/health`);
+      if (chadHealth.ok) {
+        const health = await chadHealth.json();
+        chadStatus = health.status || 'ok';
+      }
+    } catch {
+      chadStatus = 'unreachable';
+    }
 
-  return NextResponse.json({
-    status: 'ready',
-    recent_processed: recentSessions || [],
-    message: 'POST to trigger documentation worker',
-  });
+    // Get counts of processed vs unprocessed sessions
+    const { data: stats } = await supabase
+      .from('dev_ai_sessions')
+      .select('last_cataloged_at, status')
+      .limit(100);
+
+    const cataloged = stats?.filter(s => s.last_cataloged_at !== null).length || 0;
+    const pending = stats?.filter(s => s.last_cataloged_at === null && s.status === 'completed').length || 0;
+    const active = stats?.filter(s => s.status === 'active').length || 0;
+
+    // Get recent cataloged sessions
+    const { data: recent } = await supabase
+      .from('dev_ai_sessions')
+      .select('id, project_path, started_at, last_cataloged_at')
+      .not('last_cataloged_at', 'is', null)
+      .order('last_cataloged_at', { ascending: false })
+      .limit(5);
+
+    return NextResponse.json({
+      status: 'ready',
+      chad_status: chadStatus,
+      stats: { cataloged, pending, active },
+      recent_cataloged: recent || [],
+      message: 'POST to trigger Chad cataloger (extracts knowledge → sends to Susan)',
+      endpoints: {
+        trigger_all: 'POST /api/doc-worker',
+        trigger_session: 'POST /api/doc-worker with { session_id: "..." }',
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
