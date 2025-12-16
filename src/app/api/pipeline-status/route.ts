@@ -13,6 +13,24 @@ const supabase = createClient(
 export async function GET() {
   try {
     // Get counts from all tables
+    // Helper to safely get count
+    const getCount = async (table: string, filter?: { column: string; op: 'is' | 'not'; value: null }) => {
+      try {
+        let query = supabase.from(table).select('id', { count: 'exact', head: true });
+        if (filter) {
+          if (filter.op === 'is') {
+            query = query.is(filter.column, filter.value);
+          } else {
+            query = query.not(filter.column, 'is', filter.value);
+          }
+        }
+        const result = await query;
+        return result.count || 0;
+      } catch {
+        return 0;
+      }
+    };
+
     const [
       sessions,
       messages,
@@ -24,15 +42,15 @@ export async function GET() {
       pendingSessions,
       catalogedSessions
     ] = await Promise.all([
-      supabase.from('dev_ai_sessions').select('id', { count: 'exact', head: true }),
-      supabase.from('dev_ai_messages').select('id', { count: 'exact', head: true }),
-      supabase.from('dev_ai_todos').select('id', { count: 'exact', head: true }),
-      supabase.from('dev_ai_knowledge').select('id', { count: 'exact', head: true }),
-      supabase.from('dev_ai_code_changes').select('id', { count: 'exact', head: true }).catch(() => ({ count: 0 })),
-      supabase.from('dev_ai_structure_items').select('id', { count: 'exact', head: true }).catch(() => ({ count: 0 })),
-      supabase.from('dev_ai_decisions').select('id', { count: 'exact', head: true }).catch(() => ({ count: 0 })),
-      supabase.from('dev_ai_sessions').select('id', { count: 'exact', head: true }).is('last_cataloged_at', null),
-      supabase.from('dev_ai_sessions').select('id', { count: 'exact', head: true }).not('last_cataloged_at', 'is', null),
+      getCount('dev_ai_sessions'),
+      getCount('dev_ai_messages'),
+      getCount('dev_ai_todos'),
+      getCount('dev_ai_knowledge'),
+      getCount('dev_ai_code_changes'),
+      getCount('dev_ai_structure_items'),
+      getCount('dev_ai_decisions'),
+      getCount('dev_ai_sessions', { column: 'last_cataloged_at', op: 'is', value: null }),
+      getCount('dev_ai_sessions', { column: 'last_cataloged_at', op: 'not', value: null }),
     ]);
 
     // Get recent activity
@@ -54,21 +72,21 @@ export async function GET() {
 
       // Raw counts
       counts: {
-        sessions: sessions.count || 0,
-        messages: messages.count || 0,
-        todos: todos.count || 0,
-        knowledge: knowledge.count || 0,
-        codeChanges: codeChanges.count || 0,
-        structureItems: structureItems.count || 0,
-        decisions: decisions.count || 0,
+        sessions,
+        messages,
+        todos,
+        knowledge,
+        codeChanges,
+        structureItems,
+        decisions,
       },
 
       // Pipeline status
       pipeline: {
-        pending: pendingSessions.count || 0,
-        cataloged: catalogedSessions.count || 0,
-        progress: catalogedSessions.count && sessions.count
-          ? Math.round((catalogedSessions.count / sessions.count) * 100)
+        pending: pendingSessions,
+        cataloged: catalogedSessions,
+        progress: catalogedSessions && sessions
+          ? Math.round((catalogedSessions / sessions) * 100)
           : 0,
       },
 
