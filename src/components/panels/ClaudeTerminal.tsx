@@ -398,8 +398,14 @@ export function ClaudeTerminal({
     }
     console.log('[ClaudeTerminal] Sending input:', inputValue);
 
-    // Just send the message with Enter - keep it simple
-    socketRef.current.emit('input', inputValue + '\r');
+    // Send message first
+    socketRef.current.emit('input', inputValue);
+
+    // Then send multiple Enter keys with delays (like the old working code did)
+    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 100);
+    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 300);
+    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 500);
+
     setInputValue('');
   }, [inputValue]);
 
