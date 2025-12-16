@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckSquare, FileText, Table, Database, GitCommit, StickyNote, Bug } from 'lucide-react';
+import { CheckSquare, FileText, Table, Database, GitCommit, StickyNote, Bug, Brain, FolderTree } from 'lucide-react';
 import { TabType, TABS } from '../types';
 
 interface ProjectTabsProps {
@@ -10,9 +10,11 @@ interface ProjectTabsProps {
 
 const ICONS: Record<string, React.ReactNode> = {
   CheckSquare: <CheckSquare className="w-4 h-4" />,
+  Brain: <Brain className="w-4 h-4" />,
   FileText: <FileText className="w-4 h-4" />,
   Table: <Table className="w-4 h-4" />,
   Database: <Database className="w-4 h-4" />,
+  FolderTree: <FolderTree className="w-4 h-4" />,
   GitCommit: <GitCommit className="w-4 h-4" />,
   StickyNote: <StickyNote className="w-4 h-4" />,
   Bug: <Bug className="w-4 h-4" />,

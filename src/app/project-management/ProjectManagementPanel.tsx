@@ -15,6 +15,7 @@ import StructureTab from './tabs/StructureTab';
 import CodeChangesTab from './tabs/CodeChangesTab';
 import NotepadTab from './tabs/NotepadTab';
 import BugsTab from './tabs/BugsTab';
+import KnowledgeTab from './tabs/KnowledgeTab';
 
 interface ProjectSummary {
   sessions: { pending: number; processed: number; total: number };
@@ -158,6 +159,8 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
     switch (activeTab) {
       case 'todos':
         return <TodosTab projectPath={projectPath} />;
+      case 'knowledge':
+        return <KnowledgeTab projectPath={projectPath} />;
       case 'docs':
         return <DocsTab projectPath={projectPath} />;
       case 'database':

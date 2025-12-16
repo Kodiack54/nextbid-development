@@ -98,7 +98,7 @@ export interface Bug {
   resolved_at?: string;
 }
 
-export type TabType = 'todos' | 'docs' | 'database' | 'structure' | 'code-changes' | 'notepad' | 'bugs';
+export type TabType = 'todos' | 'knowledge' | 'docs' | 'database' | 'structure' | 'code-changes' | 'notepad' | 'bugs';
 
 export interface TabConfig {
   id: TabType;
@@ -108,6 +108,7 @@ export interface TabConfig {
 
 export const TABS: TabConfig[] = [
   { id: 'todos', label: 'Todos', icon: 'CheckSquare' },
+  { id: 'knowledge', label: 'Knowledge', icon: 'Brain' },
   { id: 'docs', label: 'Docs', icon: 'FileText' },
   { id: 'database', label: 'Database', icon: 'Database' },
   { id: 'structure', label: 'Structure', icon: 'FolderTree' },
