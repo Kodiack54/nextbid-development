@@ -37,8 +37,11 @@ wss.on('connection', (ws, req) => {
 
   // Send output to client
   ptyProcess.onData((data) => {
+    console.log(`[Terminal Server] Sending output: ${data.length} bytes`);
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'output', data }));
+    } else {
+      console.log(`[Terminal Server] WebSocket not open, state: ${ws.readyState}`);
     }
   });
 
