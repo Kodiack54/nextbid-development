@@ -27,10 +27,12 @@ interface ProjectDoc {
 
 interface ProjectKnowledge {
   id: string;
-  knowledge_type: string;
-  content: any;
+  category: string;
+  title: string;
+  summary?: string;
   session_id?: string;
   created_at: string;
+  importance?: number;
 }
 
 interface WorkerStatus {
@@ -404,19 +406,21 @@ function KnowledgeList({
   knowledge: ProjectKnowledge[];
   formatTime: (d: string) => string;
 }) {
-  const typeColors: Record<string, string> = {
-    decision: 'text-blue-400',
-    todo: 'text-yellow-400',
-    blocker: 'text-red-400',
-    tech_note: 'text-purple-400',
-    file_change: 'text-green-400',
+  const categoryColors: Record<string, string> = {
+    api: 'text-blue-400',
+    config: 'text-yellow-400',
+    architecture: 'text-purple-400',
+    feature: 'text-green-400',
+    'bug-fix': 'text-red-400',
+    database: 'text-cyan-400',
+    explanation: 'text-gray-400',
   };
 
   if (knowledge.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
         <p>No knowledge items yet.</p>
-        <p className="text-xs mt-1">The cataloger extracts knowledge from your chats.</p>
+        <p className="text-xs mt-1">Susan extracts knowledge from your sessions.</p>
       </div>
     );
   }
@@ -426,16 +430,21 @@ function KnowledgeList({
       {knowledge.map(item => (
         <div key={item.id} className="px-3 py-2">
           <div className="flex items-center justify-between mb-1">
-            <span className={`text-xs font-medium ${typeColors[item.knowledge_type] || 'text-gray-400'}`}>
-              {item.knowledge_type.replace('_', ' ')}
+            <span className={`text-xs font-medium ${categoryColors[item.category] || 'text-gray-400'}`}>
+              {item.category?.replace('_', ' ') || 'general'}
             </span>
             <span className="text-gray-500 text-[10px]">
               {formatTime(item.created_at)}
             </span>
           </div>
-          <div className="text-gray-300 text-[11px]">
-            {typeof item.content === 'string' ? item.content : JSON.stringify(item.content, null, 2)}
+          <div className="text-white text-xs font-medium mb-1">
+            {item.title}
           </div>
+          {item.summary && (
+            <div className="text-gray-400 text-[11px]">
+              {item.summary}
+            </div>
+          )}
         </div>
       ))}
     </div>
