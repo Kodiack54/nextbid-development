@@ -76,10 +76,11 @@ export function ProjectManagerPanel({ onSelectProject, onProjectsChange }: Proje
 
     try {
       const isNew = !editingId;
-      const res = await fetch('/api/projects', {
+      const url = isNew ? '/api/projects' : `/api/projects/${editingId}`;
+      const res = await fetch(url, {
         method: isNew ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isNew ? formData : { id: editingId, ...formData }),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
