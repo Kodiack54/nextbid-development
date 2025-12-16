@@ -21,7 +21,7 @@ export default function ProjectForm({ project, onClose, onSave }: ProjectFormPro
     port_dev: project?.port_dev?.toString() || '',
     port_test: project?.port_test?.toString() || '',
     port_prod: project?.port_prod?.toString() || '',
-    git_repository: project?.git_repository || '',
+    git_repo: project?.git_repo || '',
     table_prefix: project?.table_prefix || '',
     logo_url: project?.logo_url || '',
     is_active: project?.is_active ?? true,
@@ -226,8 +226,8 @@ export default function ProjectForm({ project, onClose, onSave }: ProjectFormPro
               <label className="block text-sm text-gray-400 mb-1">Git Repository</label>
               <input
                 type="text"
-                name="git_repository"
-                value={formData.git_repository}
+                name="git_repo"
+                value={formData.git_repo}
                 onChange={handleChange}
                 placeholder="https://github.com/org/repo"
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
