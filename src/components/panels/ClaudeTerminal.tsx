@@ -401,34 +401,16 @@ export function ClaudeTerminal({
       xtermRef.current.writeln(`\x1b[36m> ${inputValue}\x1b[0m`);
     }
 
-    // First send Escape to cancel any pending paste mode
-    socketRef.current.emit('input', '\x1b');
+    // Send Ctrl+U to clear line, Ctrl+C to cancel, then type fresh
+    socketRef.current.emit('input', '\x15\x03');
 
-    // Simulate typing by sending characters individually with tiny delays
-    const chars = inputValue.split('');
-    let delay = 50; // Start after escape key
-
-    chars.forEach((char, i) => {
-      setTimeout(() => {
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('input', char);
-        }
-      }, delay + (i * 10)); // 10ms between each character
-    });
-
-    // Send Enter after all characters + buffer time
-    const totalTime = delay + (chars.length * 10) + 50;
+    // Wait a moment, then send the message with Enter
     setTimeout(() => {
       if (socketRef.current?.connected) {
-        socketRef.current.emit('input', '\r');
-        // Second Enter to submit
-        setTimeout(() => {
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('input', '\r');
-          }
-        }, 100);
+        // Send message + double Enter
+        socketRef.current.emit('input', inputValue + '\r\r');
       }
-    }, totalTime);
+    }, 150);
 
     setInputValue('');
   }, [inputValue]);
