@@ -101,6 +101,22 @@ wss.on('connection', (ws, req) => {
       console.log(`[Terminal Server] Welcome message sent successfully`);
     }
   });
+
+  // Debug: Send ping every 5 seconds to test if data can reach browser
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      const pingMsg = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+      console.log(`[Terminal Server] Sending ping: ${pingMsg}`);
+      ws.send(pingMsg, (err) => {
+        if (err) console.error(`[Terminal Server] Ping failed:`, err.message);
+      });
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 5000);
+
+  // Clear ping on disconnect
+  ws.on('close', () => clearInterval(pingInterval));
 });
 
 wss.on('error', (error) => {
