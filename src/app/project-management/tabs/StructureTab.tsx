@@ -1,7 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FolderTree, File, Folder, Plus, Edit2, Trash2, Check, X, ChevronRight, ChevronDown } from 'lucide-react';
+import { FolderTree, File, Folder, Plus, Edit2, Trash2, Check, X, ChevronRight, ChevronDown, FolderOpen, Save } from 'lucide-react';
+
+interface ProjectPath {
+  id: string;
+  project_id: string;
+  path: string;
+  label: string;
+  description?: string;
+  created_at: string;
+}
 
 interface StructureItem {
   id: string;
@@ -19,6 +28,7 @@ interface StructureItem {
 
 interface StructureTabProps {
   projectPath: string;
+  projectId: string;
 }
 
 const STATUS_STYLES = {
@@ -32,16 +42,24 @@ const STATUS_LABELS = {
   active: 'Active',
   deprecated: 'Deprecated',
   abandoned: 'Abandoned',
-  wip: 'Work in Progress',
+  wip: 'WIP',
 };
 
-export default function StructureTab({ projectPath }: StructureTabProps) {
+export default function StructureTab({ projectPath, projectId }: StructureTabProps) {
+  // Project paths (folders belonging to this project)
+  const [projectPaths, setProjectPaths] = useState<ProjectPath[]>([]);
+  const [selectedPath, setSelectedPath] = useState<ProjectPath | null>(null);
+  const [showAddPath, setShowAddPath] = useState(false);
+  const [editingPath, setEditingPath] = useState<ProjectPath | null>(null);
+  const [pathFormData, setPathFormData] = useState({ path: '', label: '', description: '' });
+
+  // Structure items for the selected folder
   const [items, setItems] = useState<StructureItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [showForm, setShowForm] = useState(false);
+  const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<StructureItem | null>(null);
-  const [formData, setFormData] = useState({
+  const [itemFormData, setItemFormData] = useState({
     path: '',
     name: '',
     type: 'file' as 'file' | 'folder',
@@ -51,13 +69,43 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
     parent_path: '',
   });
 
+  // Fetch project paths
   useEffect(() => {
-    fetchStructure();
-  }, [projectPath]);
+    fetchProjectPaths();
+  }, [projectId]);
 
-  const fetchStructure = async () => {
+  // Fetch structure when a folder is selected
+  useEffect(() => {
+    if (selectedPath) {
+      fetchStructure(selectedPath.path);
+    }
+  }, [selectedPath]);
+
+  const fetchProjectPaths = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/susan/structures?project=${encodeURIComponent(projectPath)}`);
+      const response = await fetch(`/api/project-paths?project_id=${projectId}`);
+      const data = await response.json();
+      if (data.success) {
+        setProjectPaths(data.paths || []);
+        // Auto-select the main project path if it exists
+        const mainPath = data.paths?.find((p: ProjectPath) => p.path === projectPath);
+        if (mainPath) {
+          setSelectedPath(mainPath);
+        } else if (data.paths?.length > 0) {
+          setSelectedPath(data.paths[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching project paths:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchStructure = async (path: string) => {
+    try {
+      const response = await fetch(`/api/susan/structures?project=${encodeURIComponent(path)}`);
       const data = await response.json();
       if (data.success) {
         setItems(data.structures || []);
@@ -69,13 +117,82 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
       }
     } catch (error) {
       console.error('Error fetching structure:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Project Path CRUD
+  const handleAddPath = async () => {
+    if (!pathFormData.path || !pathFormData.label) return;
+    try {
+      const response = await fetch('/api/project-paths', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          ...pathFormData,
+        }),
+      });
+      if (response.ok) {
+        fetchProjectPaths();
+        resetPathForm();
+      }
+    } catch (error) {
+      console.error('Error adding path:', error);
+    }
+  };
+
+  const handleUpdatePath = async () => {
+    if (!editingPath) return;
+    try {
+      const response = await fetch('/api/project-paths', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingPath.id,
+          label: pathFormData.label,
+          description: pathFormData.description,
+        }),
+      });
+      if (response.ok) {
+        fetchProjectPaths();
+        resetPathForm();
+      }
+    } catch (error) {
+      console.error('Error updating path:', error);
+    }
+  };
+
+  const handleDeletePath = async (path: ProjectPath) => {
+    if (!confirm(`Remove "${path.label}" from this project?`)) return;
+    try {
+      await fetch(`/api/project-paths?id=${path.id}`, { method: 'DELETE' });
+      fetchProjectPaths();
+      if (selectedPath?.id === path.id) {
+        setSelectedPath(null);
+        setItems([]);
+      }
+    } catch (error) {
+      console.error('Error deleting path:', error);
+    }
+  };
+
+  const startEditPath = (path: ProjectPath) => {
+    setEditingPath(path);
+    setPathFormData({ path: path.path, label: path.label, description: path.description || '' });
+    setShowAddPath(true);
+  };
+
+  const resetPathForm = () => {
+    setShowAddPath(false);
+    setEditingPath(null);
+    setPathFormData({ path: '', label: '', description: '' });
+  };
+
+  // Structure Item CRUD
+  const handleSubmitItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedPath) return;
+
     try {
       const url = editingItem
         ? `/api/susan/structure/${editingItem.id}`
@@ -86,33 +203,33 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
-          project_path: projectPath,
+          ...itemFormData,
+          project_path: selectedPath.path,
         }),
       });
 
       if (response.ok) {
-        fetchStructure();
-        resetForm();
+        fetchStructure(selectedPath.path);
+        resetItemForm();
       }
     } catch (error) {
       console.error('Error saving structure item:', error);
     }
   };
 
-  const handleDelete = async (item: StructureItem) => {
+  const handleDeleteItem = async (item: StructureItem) => {
     if (!confirm(`Delete ${item.type} "${item.name}"?`)) return;
     try {
       await fetch(`/api/susan/structure/${item.id}`, { method: 'DELETE' });
-      fetchStructure();
+      if (selectedPath) fetchStructure(selectedPath.path);
     } catch (error) {
       console.error('Error deleting:', error);
     }
   };
 
-  const handleEdit = (item: StructureItem) => {
+  const handleEditItem = (item: StructureItem) => {
     setEditingItem(item);
-    setFormData({
+    setItemFormData({
       path: item.path,
       name: item.name,
       type: item.type,
@@ -121,13 +238,13 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
       notes: item.notes || '',
       parent_path: item.parent_path || '',
     });
-    setShowForm(true);
+    setShowItemForm(true);
   };
 
-  const resetForm = () => {
-    setShowForm(false);
+  const resetItemForm = () => {
+    setShowItemForm(false);
     setEditingItem(null);
-    setFormData({
+    setItemFormData({
       path: '',
       name: '',
       type: 'file',
@@ -154,7 +271,6 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
   const buildTree = () => {
     const rootItems = items.filter(item => !item.parent_path);
     return rootItems.sort((a, b) => {
-      // Folders first, then files
       if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
@@ -177,33 +293,23 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
     return (
       <div key={item.id}>
         <div
-          className={`flex items-center gap-2 py-1.5 px-2 hover:bg-gray-750 rounded group`}
-          style={{ paddingLeft: `${depth * 20 + 8}px` }}
+          className="flex items-center gap-2 py-1.5 px-2 hover:bg-gray-700 rounded group"
+          style={{ paddingLeft: `${depth * 16 + 8}px` }}
         >
-          {/* Expand/Collapse for folders */}
           {item.type === 'folder' ? (
-            <button
-              onClick={() => toggleFolder(item.path)}
-              className="text-gray-500 hover:text-white"
-            >
-              {isExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
+            <button onClick={() => toggleFolder(item.path)} className="text-gray-500 hover:text-white">
+              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
           ) : (
             <span className="w-4" />
           )}
 
-          {/* Icon */}
           {item.type === 'folder' ? (
             <Folder className="w-4 h-4 text-yellow-400" />
           ) : (
             <File className="w-4 h-4 text-gray-400" />
           )}
 
-          {/* Name */}
           <span className={`font-mono text-sm ${
             item.status === 'deprecated' || item.status === 'abandoned'
               ? 'text-gray-500 line-through'
@@ -212,40 +318,34 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
             {item.name}
           </span>
 
-          {/* Status badge */}
-          <span className={`px-1.5 py-0.5 rounded text-xs ${STATUS_STYLES[item.status]}`}>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] ${STATUS_STYLES[item.status]}`}>
             {STATUS_LABELS[item.status]}
           </span>
 
-          {/* Purpose (truncated) */}
           {item.purpose && (
-            <span className="text-gray-500 text-xs truncate max-w-[200px]">
+            <span className="text-gray-500 text-xs truncate max-w-[150px]">
               - {item.purpose}
             </span>
           )}
 
-          {/* Actions */}
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
             <button
-              onClick={() => handleEdit(item)}
-              className="p-1 text-gray-500 hover:text-white hover:bg-gray-700 rounded"
+              onClick={() => handleEditItem(item)}
+              className="p-1 text-gray-500 hover:text-white hover:bg-gray-600 rounded"
             >
               <Edit2 className="w-3 h-3" />
             </button>
             <button
-              onClick={() => handleDelete(item)}
-              className="p-1 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded"
+              onClick={() => handleDeleteItem(item)}
+              className="p-1 text-gray-500 hover:text-red-400 hover:bg-gray-600 rounded"
             >
               <Trash2 className="w-3 h-3" />
             </button>
           </div>
         </div>
 
-        {/* Children */}
         {item.type === 'folder' && isExpanded && hasChildren && (
-          <div>
-            {children.map(child => renderItem(child, depth + 1))}
-          </div>
+          <div>{children.map(child => renderItem(child, depth + 1))}</div>
         )}
       </div>
     );
@@ -260,130 +360,236 @@ export default function StructureTab({ projectPath }: StructureTabProps) {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Project Structure</h2>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Item
-        </button>
-      </div>
+    <div className="flex h-full gap-4">
+      {/* Left Panel - Project Folders */}
+      <div className="w-64 flex-shrink-0 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+        <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+          <h3 className="text-white font-semibold text-sm">Project Folders</h3>
+          <button
+            onClick={() => { resetPathForm(); setShowAddPath(true); }}
+            className="p-1 text-blue-400 hover:bg-gray-700 rounded"
+            title="Add folder"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
 
-      {/* Form */}
-      {showForm && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Name (e.g., components)"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  required
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  placeholder="Path (e.g., src/components)"
-                  value={formData.path}
-                  onChange={(e) => setFormData(prev => ({ ...prev, path: e.target.value }))}
-                  required
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as 'file' | 'folder' }))}
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="file">File</option>
-                  <option value="folder">Folder</option>
-                </select>
-
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as StructureItem['status'] }))}
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="active">Active</option>
-                  <option value="wip">Work in Progress</option>
-                  <option value="deprecated">Deprecated</option>
-                  <option value="abandoned">Abandoned</option>
-                </select>
-
-                <input
-                  type="text"
-                  placeholder="Parent path (optional)"
-                  value={formData.parent_path}
-                  onChange={(e) => setFormData(prev => ({ ...prev, parent_path: e.target.value }))}
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono text-sm"
-                />
-              </div>
-
+        {/* Add/Edit Path Form */}
+        {showAddPath && (
+          <div className="p-3 border-b border-gray-700 bg-gray-750 space-y-2">
+            <input
+              type="text"
+              placeholder="Label (e.g. Chad)"
+              value={pathFormData.label}
+              onChange={(e) => setPathFormData(p => ({ ...p, label: e.target.value }))}
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+            />
+            {!editingPath && (
               <input
                 type="text"
-                placeholder="Purpose (what is this for?)"
-                value={formData.purpose}
-                onChange={(e) => setFormData(prev => ({ ...prev, purpose: e.target.value }))}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                placeholder="Path (e.g. /var/www/NextBid_Dev/chad-5401)"
+                value={pathFormData.path}
+                onChange={(e) => setPathFormData(p => ({ ...p, path: e.target.value }))}
+                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
               />
-
-              <textarea
-                placeholder="Notes (additional details, warnings, etc.)"
-                value={formData.notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                rows={2}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none resize-none"
-              />
-
-              <div className="flex gap-2">
-                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
-                  {editingItem ? 'Update' : 'Add'}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-2 text-gray-400 hover:text-white"
-                >
-                  Cancel
-                </button>
-              </div>
+            )}
+            <input
+              type="text"
+              placeholder="Description (optional)"
+              value={pathFormData.description}
+              onChange={(e) => setPathFormData(p => ({ ...p, description: e.target.value }))}
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={editingPath ? handleUpdatePath : handleAddPath}
+                className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+              >
+                {editingPath ? 'Update' : 'Add'}
+              </button>
+              <button
+                onClick={resetPathForm}
+                className="px-3 py-1.5 text-gray-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          </form>
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Status Legend */}
-      <div className="flex items-center gap-4 mb-4 text-xs">
-        {Object.entries(STATUS_LABELS).map(([key, label]) => (
-          <span key={key} className={`px-2 py-0.5 rounded ${STATUS_STYLES[key as keyof typeof STATUS_STYLES]}`}>
-            {label}
-          </span>
-        ))}
+        {/* Folder List */}
+        <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
+          {projectPaths.length === 0 ? (
+            <div className="p-4 text-center text-gray-500 text-sm">
+              <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No folders linked</p>
+              <p className="text-xs mt-1">Add folders that belong to this project</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-700">
+              {projectPaths.map(path => (
+                <div
+                  key={path.id}
+                  className={`p-3 cursor-pointer group ${
+                    selectedPath?.id === path.id
+                      ? 'bg-blue-600/20 border-l-2 border-blue-500'
+                      : 'hover:bg-gray-750'
+                  }`}
+                  onClick={() => setSelectedPath(path)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className={`w-4 h-4 ${
+                        selectedPath?.id === path.id ? 'text-blue-400' : 'text-yellow-400'
+                      }`} />
+                      <span className="text-white font-medium text-sm">{path.label}</span>
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEditPath(path); }}
+                        className="p-1 text-gray-400 hover:text-white hover:bg-gray-600 rounded"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeletePath(path); }}
+                        className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  {path.description && (
+                    <p className="text-gray-500 text-xs mt-1 pl-6">{path.description}</p>
+                  )}
+                  <p className="text-gray-600 text-[10px] font-mono mt-1 pl-6 truncate">
+                    {path.path.split('/').pop()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Structure Tree */}
-      {items.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <FolderTree className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No structure documented yet</p>
-          <p className="text-sm mt-1">Add folders and files to track what's in this project</p>
-        </div>
-      ) : (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-2">
-          {buildTree().map(item => renderItem(item))}
-        </div>
-      )}
+      {/* Right Panel - Structure */}
+      <div className="flex-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+        {selectedPath ? (
+          <>
+            {/* Header */}
+            <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-semibold text-sm">{selectedPath.label} Structure</h3>
+                <p className="text-gray-500 text-xs font-mono">{selectedPath.path}</p>
+              </div>
+              <button
+                onClick={() => { resetItemForm(); setShowItemForm(true); }}
+                className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
+              </button>
+            </div>
+
+            {/* Item Form */}
+            {showItemForm && (
+              <div className="p-3 border-b border-gray-700 bg-gray-750">
+                <form onSubmit={handleSubmitItem} className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Name"
+                      value={itemFormData.name}
+                      onChange={(e) => setItemFormData(p => ({ ...p, name: e.target.value }))}
+                      required
+                      className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Path (e.g. src/routes)"
+                      value={itemFormData.path}
+                      onChange={(e) => setItemFormData(p => ({ ...p, path: e.target.value }))}
+                      required
+                      className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <select
+                      value={itemFormData.type}
+                      onChange={(e) => setItemFormData(p => ({ ...p, type: e.target.value as 'file' | 'folder' }))}
+                      className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                    >
+                      <option value="file">File</option>
+                      <option value="folder">Folder</option>
+                    </select>
+                    <select
+                      value={itemFormData.status}
+                      onChange={(e) => setItemFormData(p => ({ ...p, status: e.target.value as StructureItem['status'] }))}
+                      className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                    >
+                      <option value="active">Active</option>
+                      <option value="wip">WIP</option>
+                      <option value="deprecated">Deprecated</option>
+                      <option value="abandoned">Abandoned</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Parent path"
+                      value={itemFormData.parent_path}
+                      onChange={(e) => setItemFormData(p => ({ ...p, parent_path: e.target.value }))}
+                      className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Purpose - what is this for?"
+                    value={itemFormData.purpose}
+                    onChange={(e) => setItemFormData(p => ({ ...p, purpose: e.target.value }))}
+                    className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">
+                      {editingItem ? 'Update' : 'Add'}
+                    </button>
+                    <button type="button" onClick={resetItemForm} className="px-3 py-1.5 text-gray-400 hover:text-white">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Status Legend */}
+            <div className="px-3 py-2 border-b border-gray-700 flex items-center gap-3 text-xs">
+              {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                <span key={key} className={`px-2 py-0.5 rounded ${STATUS_STYLES[key as keyof typeof STATUS_STYLES]}`}>
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            {/* Structure Tree */}
+            <div className="overflow-y-auto p-2 max-h-[calc(100vh-350px)]">
+              {items.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FolderTree className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No structure documented</p>
+                  <p className="text-xs mt-1">Add files and folders to document this project</p>
+                </div>
+              ) : (
+                <div>{buildTree().map(item => renderItem(item))}</div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="text-center">
+              <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Select a folder to view its structure</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

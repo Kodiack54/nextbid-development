@@ -163,7 +163,7 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
       case 'database':
         return <DatabaseTab projectPath={projectPath} tablePrefix={selectedProject.table_prefix} />;
       case 'structure':
-        return <StructureTab projectPath={projectPath} />;
+        return <StructureTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'code-changes':
         return <CodeChangesTab projectPath={projectPath} />;
       case 'notepad':
