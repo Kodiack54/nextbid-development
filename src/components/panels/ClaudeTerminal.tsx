@@ -394,7 +394,8 @@ export function ClaudeTerminal({
       }
       return;
     }
-    const payload = inputValue + '\r';
+    // Claude Code needs TWO carriage returns: one to end input, one to submit
+    const payload = inputValue + '\r\r';
     console.log('[ClaudeTerminal] Sending input:', JSON.stringify(payload), 'length:', payload.length);
 
     // Echo input locally so user sees what they typed
