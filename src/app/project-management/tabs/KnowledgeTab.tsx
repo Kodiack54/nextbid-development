@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Brain, Search, Tag, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import CorrectionMenu from '../components/CorrectionMenu';
 
 interface KnowledgeItem {
   id: string;
@@ -199,6 +200,14 @@ export default function KnowledgeTab({ projectPath }: KnowledgeTabProps) {
                 <div className="flex items-center gap-2 text-gray-500 text-xs whitespace-nowrap">
                   <Clock className="w-3 h-3" />
                   {formatDate(item.created_at)}
+
+                <CorrectionMenu
+                  itemType="knowledge"
+                  itemId={item.id}
+                  itemTitle={item.title}
+                  currentProject={projectPath}
+                  onCorrectionSubmitted={fetchKnowledge}
+                />
                 </div>
               </div>
 
