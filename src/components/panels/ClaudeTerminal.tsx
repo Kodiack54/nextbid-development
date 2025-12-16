@@ -183,6 +183,7 @@ export function ClaudeTerminal({
     const ws = new WebSocket(fullUrl);
 
     ws.onopen = async () => {
+      console.log('[ClaudeTerminal] WebSocket OPEN - readyState:', ws.readyState);
       setConnected(true);
       setConnecting(false);
 
@@ -261,8 +262,10 @@ export function ClaudeTerminal({
     };
 
     ws.onmessage = (event) => {
+      console.log('[ClaudeTerminal] WebSocket message received:', event.data?.slice?.(0, 100) || event.data);
       try {
         const msg = JSON.parse(event.data);
+        console.log('[ClaudeTerminal] Parsed message type:', msg.type, 'data length:', msg.data?.length || 0);
         if (msg.type === 'output' && xtermRef.current) {
           // Display in terminal
           xtermRef.current.write(msg.data);
@@ -336,14 +339,16 @@ export function ClaudeTerminal({
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+      console.error('[ClaudeTerminal] WebSocket ERROR:', error);
       if (xtermRef.current) {
         xtermRef.current.writeln('\x1b[31m[Connection error]\x1b[0m');
       }
       setConnecting(false);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log('[ClaudeTerminal] WebSocket CLOSE - code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean);
       setConnected(false);
       setConnecting(false);
       if (xtermRef.current) {
