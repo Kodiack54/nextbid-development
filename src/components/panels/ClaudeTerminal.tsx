@@ -44,6 +44,8 @@ export function ClaudeTerminal({
 
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Use extracted hooks
   const {
@@ -394,6 +396,21 @@ export function ClaudeTerminal({
     }
   }, [connected]);
 
+  // Send input to terminal
+  const sendInput = useCallback(() => {
+    if (!inputValue.trim() || !wsRef.current) return;
+    wsRef.current.send(JSON.stringify({ type: 'input', data: inputValue + '\r' }));
+    setInputValue('');
+  }, [inputValue]);
+
+  // Handle input keydown
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendInput();
+    }
+  }, [sendInput]);
+
   return (
     <div className="flex flex-col h-full bg-gray-900">
       {/* Header */}
@@ -463,15 +480,29 @@ export function ClaudeTerminal({
         style={{ padding: '8px' }}
       />
 
-      {/* Hint bar */}
-      <div className="shrink-0 px-3 py-1.5 bg-gray-800 border-t border-gray-700">
-        <p className="text-gray-500 text-xs">
-          {connected
-            ? 'Click terminal to focus, then type directly. All keys work natively.'
-            : 'Click Connect to start a session with Server Claude.'
-          }
-        </p>
-      </div>
+      {/* Input bar */}
+      {connected && (
+        <div className="shrink-0 px-2 py-2 bg-gray-800 border-t border-gray-700">
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Type command and press Enter..."
+              className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+            />
+            <button
+              onClick={sendInput}
+              disabled={!inputValue.trim()}
+              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-sm"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
