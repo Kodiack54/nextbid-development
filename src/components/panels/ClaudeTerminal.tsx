@@ -398,13 +398,16 @@ export function ClaudeTerminal({
     }
     console.log('[ClaudeTerminal] Sending input:', inputValue);
 
-    // Send message first
+    // Match old sendChunkedMessage behavior exactly:
+    // 1. Send message first (no \r)
     socketRef.current.emit('input', inputValue);
 
-    // Then send multiple Enter keys with delays (like the old working code did)
-    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 100);
-    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 300);
-    setTimeout(() => socketRef.current?.connected && socketRef.current.emit('input', '\r'), 500);
+    // 2. Wait 50ms, then send \r
+    setTimeout(() => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('input', '\r');
+      }
+    }, 50);
 
     setInputValue('');
   }, [inputValue]);
