@@ -56,6 +56,7 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message.toString());
+      console.log(`[Terminal Server] Received: ${msg.type}`, msg.type === 'input' ? msg.data.slice(0, 50) : '');
 
       if (msg.type === 'input') {
         ptyProcess.write(msg.data);
