@@ -47,11 +47,18 @@ export default function KnowledgeTab({ projectPath }: KnowledgeTabProps) {
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('project', projectPath);
+      // Try project-specific first, then fall back to all
+      if (projectPath) params.set('project', projectPath);
       if (searchQuery) params.set('query', searchQuery);
 
-      const response = await fetch(`/api/susan/query?${params}`);
-      const data = await response.json();
+      let response = await fetch(`/api/susan/query?${params}`);
+      let data = await response.json();
+
+      // If project filter returns empty, fetch all knowledge
+      if (Array.isArray(data) && data.length === 0 && projectPath && !searchQuery) {
+        response = await fetch('/api/susan/query');
+        data = await response.json();
+      }
 
       if (Array.isArray(data)) {
         setItems(data);
