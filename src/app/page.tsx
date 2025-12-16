@@ -23,6 +23,7 @@ import {
   StorageMonitorPanel,
   DocsPanel,
   ClaudeTerminal,
+  SystemHealthPanel,
 } from '../components/panels';
 import ProjectManagementPanel from './project-management/ProjectManagementPanel';
 import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
@@ -645,6 +646,7 @@ User: The Boss`;
               { id: 'storage', icon: '💾', label: 'Storage' },
               { id: 'projects', icon: '⚙️', label: 'Projects' },
               { id: 'docs', icon: '📝', label: 'Docs' },
+              { id: 'health', icon: '🩺', label: 'AI Health' },
             ]}
             activePanel={activePanel}
             onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
@@ -672,6 +674,7 @@ User: The Boss`;
                 {activePanel === 'chatlog' && '📜 Chat Log'}
                 {activePanel === 'hub' && '🎯 Session Hub'}
                 {activePanel === 'storage' && '💾 Storage Monitor'}
+                {activePanel === 'health' && '🩺 AI Health'}
               </span>
               <button onClick={() => setActivePanel(null)} className="text-gray-500 hover:text-white">
                 ✕
@@ -705,6 +708,7 @@ User: The Boss`;
                 />
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}
+              {activePanel === 'health' && <SystemHealthPanel />}
               {activePanel === 'docs' && <DocsPanel workerStatus={docWorkerStatus} onTriggerWorker={triggerDocWorker} />}
             </div>
           </div>
