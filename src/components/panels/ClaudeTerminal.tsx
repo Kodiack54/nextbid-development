@@ -176,7 +176,7 @@ export function ClaudeTerminal({
     contextSentRef.current = false;
 
     const contextPromise = fetchSusanContext();
-    connectToChad();
+    // connectToChad(); // DISABLED - causing terminal freeze
 
     const wsEndpoint = wsUrl || `ws://${DEV_DROPLET}:5400`;
     const fullUrl = `${wsEndpoint}?path=${encodeURIComponent(projectPath)}&mode=claude`;
@@ -269,7 +269,7 @@ export function ClaudeTerminal({
           xtermRef.current.scrollToBottom();
 
           // Send to Chad for transcription/logging
-          sendToChad(msg.data);
+          // sendToChad(msg.data); // DISABLED - causing terminal freeze
 
           // Clean for detection only (not for chat anymore)
           const cleanData = cleanAnsiCodes(msg.data);
