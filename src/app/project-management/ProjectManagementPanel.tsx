@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowLeft, Server, ChevronRight, Settings, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, ArrowLeft, Server, ChevronRight, Settings, ChevronUp, ChevronDown, CheckSquare, BookOpen, Clock, AlertCircle } from 'lucide-react';
 import { Project, TabType, TABS } from './types';
 import ProjectHeader from './components/ProjectHeader';
 import ProjectTabs from './components/ProjectTabs';
@@ -16,6 +16,15 @@ import CodeChangesTab from './tabs/CodeChangesTab';
 import NotepadTab from './tabs/NotepadTab';
 import BugsTab from './tabs/BugsTab';
 
+interface ProjectSummary {
+  sessions: { pending: number; processed: number; total: number };
+  todos: { pending: number; completed: number; total: number };
+  knowledge: number;
+  bugs: number;
+  code_changes: number;
+  last_activity: string | null;
+}
+
 interface ProjectManagementPanelProps {
   onProjectsChange?: () => void;
 }
@@ -27,10 +36,17 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
   const [isLoading, setIsLoading] = useState(true);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [projectSummaries, setProjectSummaries] = useState<Record<string, ProjectSummary>>({});
 
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  useEffect(() => {
+    if (projects.length > 0) {
+      fetchProjectSummaries();
+    }
+  }, [projects]);
 
   const fetchProjects = async () => {
     try {
@@ -44,6 +60,34 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchProjectSummaries = async () => {
+    try {
+      const response = await fetch('/api/projects/summary');
+      const data = await response.json();
+      if (data.success && data.summaries) {
+        setProjectSummaries(data.summaries);
+      }
+    } catch (error) {
+      console.error('Error fetching project summaries:', error);
+    }
+  };
+
+  const formatTimeAgo = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   const handleSelectProject = (project: Project) => {
@@ -308,6 +352,55 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
                       </span>
                     )}
                   </div>
+
+                  {/* At-a-glance Stats Row */}
+                  {projectSummaries[project.id] && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 pt-2 border-t border-gray-700/50 text-xs">
+                      {/* Todos */}
+                      {projectSummaries[project.id].todos.total > 0 && (
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <CheckSquare className="w-3 h-3" />
+                          <span className="text-yellow-400">{projectSummaries[project.id].todos.pending}</span>
+                          <span className="text-gray-600">/</span>
+                          <span className="text-green-400">{projectSummaries[project.id].todos.completed}</span>
+                          <span className="text-gray-600">todos</span>
+                        </span>
+                      )}
+
+                      {/* Knowledge */}
+                      {projectSummaries[project.id].knowledge > 0 && (
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <BookOpen className="w-3 h-3" />
+                          <span className="text-purple-400">{projectSummaries[project.id].knowledge}</span>
+                          <span className="text-gray-600">knowledge</span>
+                        </span>
+                      )}
+
+                      {/* Bugs */}
+                      {projectSummaries[project.id].bugs > 0 && (
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <AlertCircle className="w-3 h-3" />
+                          <span className="text-red-400">{projectSummaries[project.id].bugs}</span>
+                          <span className="text-gray-600">bugs</span>
+                        </span>
+                      )}
+
+                      {/* Pending Sessions */}
+                      {projectSummaries[project.id].sessions.pending > 0 && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-600/10 text-yellow-400 rounded">
+                          {projectSummaries[project.id].sessions.pending} pending
+                        </span>
+                      )}
+
+                      {/* Last Activity */}
+                      {projectSummaries[project.id].last_activity && (
+                        <span className="flex items-center gap-1 text-gray-500 ml-auto">
+                          <Clock className="w-3 h-3" />
+                          {formatTimeAgo(projectSummaries[project.id].last_activity)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
