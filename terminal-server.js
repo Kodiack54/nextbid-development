@@ -9,8 +9,13 @@ const pty = require('node-pty');
 const PORT = process.env.TERMINAL_WS_PORT || 5400;
 const sessions = new Map();
 
-const wss = new WebSocket.Server({ host: '0.0.0.0', port: PORT }, () => {
-  console.log(`[Terminal Server] Running on 0.0.0.0:${PORT}`);
+const wss = new WebSocket.Server({
+  host: '0.0.0.0',
+  port: PORT,
+  // Disable compression - can cause issues with some firewalls/proxies
+  perMessageDeflate: false,
+}, () => {
+  console.log(`[Terminal Server] Running on 0.0.0.0:${PORT} (compression disabled)`);
 });
 
 wss.on('connection', (ws, req) => {
