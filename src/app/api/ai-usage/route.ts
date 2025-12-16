@@ -91,13 +91,17 @@ export async function GET(request: NextRequest) {
     // AI Team member info
     const teamMembers: Record<string, { name: string; role: string; emoji: string }> = {
       'claude': { name: 'Claude', role: 'Lead Programmer', emoji: '👨‍💻' },
-      'chad': { name: 'Chad', role: 'Assistant Dev', emoji: '🧑‍💻' },
+      'chad': { name: 'Chad', role: 'Receptionist', emoji: '🧑‍💻' },
       'ryan': { name: 'Ryan', role: 'Runner', emoji: '🏃' },
       'susan': { name: 'Susan', role: 'Librarian', emoji: '👩‍💼' },
       'tiffany': { name: 'Tiffany', role: 'Tester', emoji: '🧪' },
       'mike': { name: 'Mike', role: 'Tester', emoji: '🔬' },
       'clair': { name: 'Clair', role: 'Doc Manager', emoji: '📚' },
     };
+    // Initialize all team members with zero usage (so they always appear)
+    Object.entries(teamMembers).forEach(([key, member]) => {
+      byAssistant[key] = { name: member.name, role: member.role, requests: 0, tokens: 0, cost: 0 };
+    });
 
     usage?.forEach((row) => {
       totals.input_tokens += row.input_tokens || 0;

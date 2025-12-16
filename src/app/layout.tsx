@@ -3,7 +3,7 @@ import './globals.css';
 import { UserProvider } from './contexts/UserContext';
 
 export const metadata: Metadata = {
-  title: 'Dev Studio - NextBid',
+  title: "Kodiack Studio's",
   description: 'Development environment with Claude AI',
   icons: {
     icon: '/images/nextbid-logo.png',
