@@ -11,6 +11,11 @@ interface Session {
   summary?: string;
   dev_projects?: { name: string; slug: string };
   message_count?: number;
+  source_type?: string;
+  source_name?: string;
+  project_path?: string;
+  needs_review?: boolean;
+  processed_by_susan?: boolean;
 }
 
 interface ProjectDoc {
@@ -55,18 +60,13 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
-  // Fetch sessions
+  // Fetch sessions from Chad's dumps (dev_ai_sessions)
   useEffect(() => {
-    if (!userId) return;
-
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ limit: '20' });
-        if (userId) params.append('user_id', userId);
-        if (projectId) params.append('project_id', projectId);
-
-        const res = await fetch(`/api/sessions?${params}`);
+        // Fetch from Chad's pending dumps endpoint
+        const res = await fetch('/api/chad/sessions');
         const data = await res.json();
         if (data.success) {
           setSessions(data.sessions || []);
@@ -79,7 +79,10 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
     };
 
     fetchSessions();
-  }, [userId, projectId]);
+    // Refresh every 30 seconds to catch new dumps
+    const interval = setInterval(fetchSessions, 30000);
+    return () => clearInterval(interval);
+  }, [projectId]);
 
   // Fetch docs and knowledge when project changes
   useEffect(() => {
@@ -238,49 +241,101 @@ function SessionsList({
   if (sessions.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
-        <p>No sessions yet.</p>
-        <p className="text-xs mt-1">Start chatting to create a session.</p>
+        <p>No session dumps yet.</p>
+        <p className="text-xs mt-1">Chad will capture dumps every 30 minutes.</p>
       </div>
     );
   }
 
+  // Split into pending and processed
+  const pending = sessions.filter(s => s.needs_review);
+  const processed = sessions.filter(s => !s.needs_review);
+
   return (
-    <div className="divide-y divide-gray-800">
-      {sessions.map(session => (
-        <button
-          key={session.id}
-          onClick={() => onSelectSession(selectedSession?.id === session.id ? null : session)}
-          className={`w-full px-3 py-2 text-left hover:bg-gray-800 transition-colors ${
-            selectedSession?.id === session.id ? 'bg-gray-800' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                session.status === 'active' ? 'bg-green-400' : 'bg-gray-500'
-              }`} />
-              <span className="text-white text-xs font-medium truncate max-w-[150px]">
-                {session.title || 'Untitled Session'}
-              </span>
-            </div>
-            <span className="text-gray-500 text-[10px]">
-              {formatTime(session.started_at)}
-            </span>
+    <div>
+      {/* Pending for Susan */}
+      {pending.length > 0 && (
+        <div className="border-b border-gray-700">
+          <div className="px-3 py-1.5 bg-yellow-900/20 text-yellow-400 text-[10px] font-medium">
+            Pending for Susan ({pending.length})
           </div>
+          <div className="divide-y divide-gray-800">
+            {pending.map(session => (
+              <button
+                key={session.id}
+                onClick={() => onSelectSession(selectedSession?.id === session.id ? null : session)}
+                className={`w-full px-3 py-2 text-left hover:bg-gray-800 transition-colors ${
+                  selectedSession?.id === session.id ? 'bg-gray-800' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                    <span className="text-white text-xs font-medium truncate max-w-[120px]">
+                      {session.source_name || session.title || 'Unknown'}
+                    </span>
+                    {session.message_count && (
+                      <span className="text-gray-500 text-[10px]">
+                        ({session.message_count} msgs)
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-gray-500 text-[10px]">
+                    {formatTime(session.started_at)}
+                  </span>
+                </div>
+                {session.source_type && (
+                  <div className="text-gray-500 text-[10px] mt-0.5 pl-3.5">
+                    {session.source_type}
+                  </div>
+                )}
+                {selectedSession?.id === session.id && session.summary && (
+                  <div className="mt-2 p-2 bg-gray-900 rounded text-gray-400 text-[11px] whitespace-pre-wrap">
+                    {session.summary}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-          {session.dev_projects && (
-            <div className="text-gray-500 text-[10px] mt-0.5 pl-3.5">
-              {session.dev_projects.name}
-            </div>
-          )}
-
-          {selectedSession?.id === session.id && session.summary && (
-            <div className="mt-2 p-2 bg-gray-900 rounded text-gray-400 text-[11px] whitespace-pre-wrap">
-              {session.summary}
-            </div>
-          )}
-        </button>
-      ))}
+      {/* Processed sessions */}
+      {processed.length > 0 && (
+        <div>
+          <div className="px-3 py-1.5 bg-gray-800 text-gray-400 text-[10px] font-medium">
+            Processed ({processed.length})
+          </div>
+          <div className="divide-y divide-gray-800">
+            {processed.map(session => (
+              <button
+                key={session.id}
+                onClick={() => onSelectSession(selectedSession?.id === session.id ? null : session)}
+                className={`w-full px-3 py-2 text-left hover:bg-gray-800 transition-colors ${
+                  selectedSession?.id === session.id ? 'bg-gray-800' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                    <span className="text-gray-300 text-xs font-medium truncate max-w-[120px]">
+                      {session.source_name || session.title || 'Unknown'}
+                    </span>
+                  </div>
+                  <span className="text-gray-500 text-[10px]">
+                    {formatTime(session.started_at)}
+                  </span>
+                </div>
+                {selectedSession?.id === session.id && session.summary && (
+                  <div className="mt-2 p-2 bg-gray-900 rounded text-gray-400 text-[11px] whitespace-pre-wrap">
+                    {session.summary}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
