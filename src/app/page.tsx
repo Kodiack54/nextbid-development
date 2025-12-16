@@ -77,7 +77,7 @@ export default function DevEnvironmentPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedEnv, setSelectedEnv] = useState<Environment>(ENVIRONMENTS[0]);
-  const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [activePanel, setActivePanel] = useState<PanelType>('projects');
   const [isLocking, setIsLocking] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

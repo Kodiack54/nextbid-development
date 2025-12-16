@@ -98,6 +98,39 @@ function ProjectManagementContent() {
     handleFormClose();
   };
 
+  // Move project up or down in the list
+  const handleMoveProject = async (projectId: string, direction: 'up' | 'down') => {
+    const currentIndex = projects.findIndex(p => p.id === projectId);
+    if (currentIndex === -1) return;
+
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (swapIndex < 0 || swapIndex >= projects.length) return;
+
+    const currentProject = projects[currentIndex];
+    const swapProject = projects[swapIndex];
+
+    // Swap sort_order values
+    try {
+      await Promise.all([
+        fetch('/api/projects', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentProject.id, sort_order: swapProject.sort_order }),
+        }),
+        fetch('/api/projects', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: swapProject.id, sort_order: currentProject.sort_order }),
+        }),
+      ]);
+
+      // Refresh the list
+      fetchProjects();
+    } catch (error) {
+      console.error('Error moving project:', error);
+    }
+  };
+
   const renderTabContent = () => {
     if (!selectedProject) return null;
 
@@ -214,12 +247,16 @@ function ProjectManagementContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map(project => (
+            {projects.map((project, index) => (
               <ProjectCard
                 key={project.id}
                 project={project}
                 onClick={() => handleSelectProject(project)}
                 onEdit={() => handleEditProject(project)}
+                onMoveUp={() => handleMoveProject(project.id, 'up')}
+                onMoveDown={() => handleMoveProject(project.id, 'down')}
+                isFirst={index === 0}
+                isLast={index === projects.length - 1}
               />
             ))}
           </div>

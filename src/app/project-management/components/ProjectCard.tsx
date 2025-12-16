@@ -1,15 +1,19 @@
 'use client';
 
-import { Settings, Server, GitBranch } from 'lucide-react';
+import { Settings, Server, GitBranch, ChevronUp, ChevronDown } from 'lucide-react';
 import { Project } from '../types';
 
 interface ProjectCardProps {
   project: Project;
   onClick: () => void;
   onEdit: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-export default function ProjectCard({ project, onClick, onEdit }: ProjectCardProps) {
+export default function ProjectCard({ project, onClick, onEdit, onMoveUp, onMoveDown, isFirst, isLast }: ProjectCardProps) {
   return (
     <div
       className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-blue-500 transition-colors cursor-pointer group"
@@ -34,15 +38,42 @@ export default function ProjectCard({ project, onClick, onEdit }: ProjectCardPro
             <span className="text-gray-500 text-xs">{project.slug}</span>
           </div>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-all"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Move buttons */}
+          <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-all">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp?.();
+              }}
+              disabled={isFirst}
+              className={`p-0.5 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-700'}`}
+              title="Move up"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown?.();
+              }}
+              disabled={isLast}
+              className={`p-0.5 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-700'}`}
+              title="Move down"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-all"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Description */}
