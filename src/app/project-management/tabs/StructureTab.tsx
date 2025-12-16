@@ -8,7 +8,6 @@ interface ProjectPath {
   project_id: string;
   path: string;
   label: string;
-  description?: string;
   created_at: string;
 }
 
@@ -51,7 +50,7 @@ export default function StructureTab({ projectPath, projectId }: StructureTabPro
   const [selectedPath, setSelectedPath] = useState<ProjectPath | null>(null);
   const [showAddPath, setShowAddPath] = useState(false);
   const [editingPath, setEditingPath] = useState<ProjectPath | null>(null);
-  const [pathFormData, setPathFormData] = useState({ path: '', label: '', description: '' });
+  const [pathFormData, setPathFormData] = useState({ path: '', label: '' });
 
   // Structure items for the selected folder
   const [items, setItems] = useState<StructureItem[]>([]);
@@ -150,7 +149,6 @@ export default function StructureTab({ projectPath, projectId }: StructureTabPro
         body: JSON.stringify({
           id: editingPath.id,
           label: pathFormData.label,
-          description: pathFormData.description,
         }),
       });
       if (response.ok) {
@@ -178,14 +176,14 @@ export default function StructureTab({ projectPath, projectId }: StructureTabPro
 
   const startEditPath = (path: ProjectPath) => {
     setEditingPath(path);
-    setPathFormData({ path: path.path, label: path.label, description: path.description || '' });
+    setPathFormData({ path: path.path, label: path.label });
     setShowAddPath(true);
   };
 
   const resetPathForm = () => {
     setShowAddPath(false);
     setEditingPath(null);
-    setPathFormData({ path: '', label: '', description: '' });
+    setPathFormData({ path: '', label: '' });
   };
 
   // Structure Item CRUD
@@ -393,13 +391,6 @@ export default function StructureTab({ projectPath, projectId }: StructureTabPro
                 className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
               />
             )}
-            <input
-              type="text"
-              placeholder="Description (optional)"
-              value={pathFormData.description}
-              onChange={(e) => setPathFormData(p => ({ ...p, description: e.target.value }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-            />
             <div className="flex gap-2">
               <button
                 onClick={editingPath ? handleUpdatePath : handleAddPath}
@@ -459,9 +450,6 @@ export default function StructureTab({ projectPath, projectId }: StructureTabPro
                       </button>
                     </div>
                   </div>
-                  {path.description && (
-                    <p className="text-gray-500 text-xs mt-1 pl-6">{path.description}</p>
-                  )}
                   <p className="text-gray-600 text-[10px] font-mono mt-1 pl-6 truncate">
                     {path.path.split('/').pop()}
                   </p>

@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
         project_id,
         path,
         label,
-        description: description || null,
       })
       .select()
       .single();
@@ -116,7 +115,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, label, description } = body;
+    const { id, label } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -124,7 +123,6 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Record<string, any> = {};
     if (label !== undefined) updateData.label = label;
-    if (description !== undefined) updateData.description = description;
 
     const { data: updated, error } = await supabase
       .from('dev_project_paths')
