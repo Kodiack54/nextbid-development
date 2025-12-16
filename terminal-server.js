@@ -35,11 +35,20 @@ wss.on('connection', (ws, req) => {
 
   console.log(`[Terminal Server] Spawned bash in ${projectPath}`);
 
+  // Add per-connection error handler
+  ws.on('error', (err) => {
+    console.error(`[Terminal Server] Connection error for ${sessionId}:`, err.message);
+  });
+
   // Send output to client
   ptyProcess.onData((data) => {
     console.log(`[Terminal Server] Sending output: ${data.length} bytes`);
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'output', data }));
+      ws.send(JSON.stringify({ type: 'output', data }), (err) => {
+        if (err) {
+          console.error(`[Terminal Server] Send failed:`, err.message);
+        }
+      });
     } else {
       console.log(`[Terminal Server] WebSocket not open, state: ${ws.readyState}`);
     }
@@ -49,7 +58,9 @@ wss.on('connection', (ws, req) => {
   ptyProcess.onExit(({ exitCode }) => {
     console.log(`[Terminal Server] Process exited: ${exitCode}`);
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'exit', code: exitCode }));
+      ws.send(JSON.stringify({ type: 'exit', code: exitCode }), (err) => {
+        if (err) console.error(`[Terminal Server] Exit send failed:`, err.message);
+      });
     }
   });
 
@@ -79,10 +90,17 @@ wss.on('connection', (ws, req) => {
   });
 
   // Welcome message
+  console.log(`[Terminal Server] Sending welcome message...`);
   ws.send(JSON.stringify({
     type: 'output',
     data: `\r\n\x1b[36m[Dev Studio Terminal]\x1b[0m Connected to ${projectPath}\r\n\x1b[33mType 'claude' to start Claude Code\x1b[0m\r\n\r\n`
-  }));
+  }), (err) => {
+    if (err) {
+      console.error(`[Terminal Server] Welcome send failed:`, err.message);
+    } else {
+      console.log(`[Terminal Server] Welcome message sent successfully`);
+    }
+  });
 });
 
 wss.on('error', (error) => {
