@@ -54,9 +54,9 @@ export default function ProjectHeader({ project, onEdit }: ProjectHeaderProps) {
             )}
 
             {/* Git */}
-            {project.git_repository && (
+            {project.git_repo && (
               <a
-                href={project.git_repository}
+                href={project.git_repo}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-gray-400 hover:text-blue-400 text-sm transition-colors"

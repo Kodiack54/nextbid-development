@@ -115,11 +115,11 @@ export default function ProjectCard({ project, onClick, onEdit, onMoveUp, onMove
 
         {/* Git & Build */}
         <div className="flex items-center justify-between">
-          {project.git_repository && (
+          {project.git_repo && (
             <div className="flex items-center gap-1 text-gray-500">
               <GitBranch className="w-3 h-3" />
               <span className="text-xs truncate max-w-[150px]">
-                {project.git_repository.split('/').pop()?.replace('.git', '')}
+                {project.git_repo.split('/').pop()?.replace('.git', '')}
               </span>
             </div>
           )}

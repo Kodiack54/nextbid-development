@@ -14,7 +14,7 @@ export interface Project {
   port_dev?: number;
   port_test?: number;
   port_prod?: number;
-  git_repository?: string;
+  git_repo?: string;
   table_prefix?: string;
   logo_url?: string;
   build_number?: string;

@@ -346,9 +346,9 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
                     )}
 
                     {/* Git Repo */}
-                    {project.git_repository && (
+                    {project.git_repo && (
                       <span className="text-gray-500 truncate max-w-[200px]">
-                        {project.git_repository.replace('https://github.com/', '')}
+                        {project.git_repo.replace('https://github.com/', '')}
                       </span>
                     )}
                   </div>
