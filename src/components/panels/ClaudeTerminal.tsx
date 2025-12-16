@@ -45,7 +45,7 @@ export function ClaudeTerminal({
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Use extracted hooks
   const {
@@ -442,20 +442,26 @@ export function ClaudeTerminal({
       {/* Input bar */}
       {connected && (
         <div className="shrink-0 px-2 py-2 bg-gray-800 border-t border-gray-700">
-          <div className="flex gap-2">
-            <input
+          <div className="flex gap-2 items-end">
+            <textarea
               ref={inputRef}
-              type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              placeholder="Type command and press Enter..."
-              className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+              onKeyDown={(e) => {
+                // Shift+Enter for new line, Enter alone to send
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendInput();
+                }
+              }}
+              placeholder="Type command and press Enter... (Shift+Enter for new line)"
+              rows={4}
+              className="flex-1 bg-gray-900 border border-orange-600/50 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 resize-none"
             />
             <button
               onClick={sendInput}
               disabled={!inputValue.trim()}
-              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-sm"
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-sm h-fit"
             >
               Send
             </button>
