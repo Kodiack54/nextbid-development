@@ -2,16 +2,28 @@
 
 /**
  * Clean ANSI escape codes from terminal output
+ * Note: Be selective - don't strip everything or box drawing chars break
  */
 export function cleanAnsiCodes(data: string): string {
   return data
-    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')  // ESC [ ... letter (cursor, colors, etc)
-    .replace(/\[([0-9;]*[A-Za-z])/g, '')    // Visible codes without ESC prefix
-    .replace(/\x1b\[\?[0-9;]*[a-zA-Z]/g, '') // Cursor visibility/mode sequences
-    .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences (title bar, etc)
-    .replace(/\x1b/g, '')                    // Any remaining escape chars
-    .replace(/\r(?!\n)/g, '')                // Carriage returns (keep newlines)
-    .replace(/\n{3,}/g, '\n\n')              // Collapse multiple blank lines
+    // Strip color and formatting codes (SGR - Select Graphic Rendition)
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    // Strip cursor movement codes (A=up, B=down, C=forward, D=back, etc)
+    .replace(/\x1b\[[0-9;]*[ABCDEFGHJKSTfnsu]/g, '')
+    // Strip erase codes (J=screen, K=line)
+    .replace(/\x1b\[[0-9;]*[JK]/g, '')
+    // Strip cursor visibility/mode sequences
+    .replace(/\x1b\[\?[0-9;]*[hl]/g, '')
+    // Strip OSC sequences (title bar, etc) - ends with BEL or ST
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    // Strip remaining OSC that might not be properly terminated
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    // DON'T strip all \x1b - that breaks legitimate characters
+    // DON'T strip control chars 0x00-0x1F blanket - breaks formatting
+    // Strip carriage returns (keep newlines)
+    .replace(/\r(?!\n)/g, '')
+    // Collapse multiple blank lines
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 

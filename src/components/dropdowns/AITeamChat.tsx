@@ -25,6 +25,8 @@ interface AITeamChatProps {
   onConnectClaude?: () => void; // Trigger Claude connect when clicking his name
   claudeConnected?: boolean;
   claudeMessages?: ChatMessage[];
+  // External Claude Code (MCP) connection status
+  externalClaudeConnected?: boolean;
   // Chad API integration
   onSendToChad?: (message: string) => Promise<string>;
   chadMessages?: ChatMessage[];
@@ -48,6 +50,7 @@ export default function AITeamChat({
   onConnectClaude,
   claudeConnected = false,
   claudeMessages = [],
+  externalClaudeConnected = false,
   onSendToChad,
   chadMessages = [],
   onSendToSusan,
@@ -481,8 +484,18 @@ export default function AITeamChat({
                   <>
                     <span className="text-2xl">👨‍💻</span>
                     <div>
-                      <p className="text-white font-medium">Claude</p>
-                      <p className="text-gray-500 text-xs">Lead Programmer - Terminal ($200/mo sub)</p>
+                      <p className="text-white font-medium">Claude - <span className="text-purple-400">[Internal Gateway]</span></p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500">Lead Programmer</span>
+                        <span className={`px-1.5 py-0.5 rounded ${claudeConnected ? 'bg-green-900/50 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
+                          {claudeConnected ? 'Connected' : 'Disconnected'}
+                        </span>
+                        {externalClaudeConnected && (
+                          <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">
+                            External
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}

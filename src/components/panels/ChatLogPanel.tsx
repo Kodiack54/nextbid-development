@@ -211,9 +211,35 @@ export function ChatLogPanel({
               )}
               <div ref={claudeEndRef} />
             </div>
-            {/* Claude uses terminal input - show hint */}
-            <div className="p-2 border-t border-gray-700 bg-gray-800/30 text-center">
-              <span className="text-[10px] text-gray-500">Use terminal input below →</span>
+            {/* Claude input field */}
+            <div className="p-2 border-t border-gray-700 bg-gray-800/50">
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  value={claudeInput}
+                  onChange={(e) => setClaudeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && claudeInput.trim() && onSendToClaudeTerminal) {
+                      onSendToClaudeTerminal(claudeInput.trim());
+                      setClaudeInput('');
+                    }
+                  }}
+                  placeholder="Reply to Claude..."
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  onClick={() => {
+                    if (claudeInput.trim() && onSendToClaudeTerminal) {
+                      onSendToClaudeTerminal(claudeInput.trim());
+                      setClaudeInput('');
+                    }
+                  }}
+                  disabled={!claudeInput.trim() || !onSendToClaudeTerminal}
+                  className="px-2 py-1 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs"
+                >
+                  Send
+                </button>
+              </div>
             </div>
           </div>
 

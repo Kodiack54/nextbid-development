@@ -125,11 +125,32 @@ export default function DevEnvironmentPage() {
 
   // AI Team Chat state
   const [claudeConnected, setClaudeConnected] = useState(false);
+  const [externalClaudeConnected, setExternalClaudeConnected] = useState(false);
   const [claudeConversation, setClaudeConversation] = useState<ConversationMessage[]>([]);
   const [chadConversation, setChadConversation] = useState<ConversationMessage[]>([]);
   const [susanConversation, setSusanConversation] = useState<ConversationMessage[]>([]);
   const claudeSendRef = useRef<((message: string) => void) | null>(null);
   const claudeConnectRef = useRef<(() => void) | null>(null);
+
+  // Poll for external Claude Code (MCP) connection status
+  useEffect(() => {
+    const checkExternalConnection = async () => {
+      try {
+        const res = await fetch('/api/external-claude/status');
+        if (res.ok) {
+          const data = await res.json();
+          setExternalClaudeConnected(data.connected);
+        }
+      } catch {
+        // Ignore errors - just means no external connection
+      }
+    };
+
+    // Check immediately and then every 5 seconds
+    checkExternalConnection();
+    const interval = setInterval(checkExternalConnection, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Handler for Claude conversation messages (from terminal)
   const handleClaudeConversation = (msg: ConversationMessage) => {
@@ -602,6 +623,7 @@ User: The Boss`;
             onConnectClaude={() => claudeConnectRef.current?.()}
             claudeConnected={claudeConnected}
             claudeMessages={claudeConversation}
+            externalClaudeConnected={externalClaudeConnected}
             onSendToChad={handleSendToChad}
             chadMessages={chadConversation}
             onSendToSusan={handleSendToSusan}

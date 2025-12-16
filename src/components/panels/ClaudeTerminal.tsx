@@ -75,6 +75,7 @@ export function ClaudeTerminal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recentMessagesRef = useRef<string[]>([]);
   const lastMessageTimeRef = useRef<number>(0);
+  const messageHashesRef = useRef<Set<string>>(new Set());
   const briefingSentToClaudeRef = useRef<boolean>(false);
   const showedReadyMessageRef = useRef<boolean>(false);
   const readyToShowMessagesRef = useRef<boolean>(false);
@@ -396,21 +397,31 @@ export function ClaudeTerminal({
               return;
             }
 
-            // Deduplication
-            const normalizedContent = content.replace(/\s+/g, ' ').toLowerCase();
-            const isDuplicate = recentMessagesRef.current.some(recent => {
-              const normalizedRecent = recent.replace(/\s+/g, ' ').toLowerCase();
-              if (normalizedContent === normalizedRecent) return true;
-              const sig1 = normalizedContent.slice(0, 50);
-              const sig2 = normalizedRecent.slice(0, 50);
-              if (sig1 === sig2) return true;
-              return false;
-            });
+            // Better deduplication using content hash
+            // Simple hash function for quick comparison
+            const simpleHash = (str: string): string => {
+              let hash = 0;
+              const normalized = str.replace(/\s+/g, ' ').trim().toLowerCase();
+              for (let i = 0; i < normalized.length; i++) {
+                const char = normalized.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+              }
+              return hash.toString(16);
+            };
+
+            const contentHash = simpleHash(content);
+            const isDuplicate = messageHashesRef.current.has(contentHash);
 
             const now = Date.now();
             const tooSoon = now - lastMessageTimeRef.current < DEDUP_COOLDOWN_MS;
 
             if (!isDuplicate && !tooSoon) {
+              // Add hash and auto-expire after 10 seconds
+              messageHashesRef.current.add(contentHash);
+              setTimeout(() => messageHashesRef.current.delete(contentHash), 10000);
+
+              // Keep recent messages for reference (limit to 10)
               recentMessagesRef.current.push(content);
               if (recentMessagesRef.current.length > 10) {
                 recentMessagesRef.current.shift();
