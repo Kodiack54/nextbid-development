@@ -1,49 +1,84 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Check, Clock, AlertCircle, X } from 'lucide-react';
-import { Todo } from '../types';
+import { RefreshCw, FolderOpen, FileText, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+
+interface ProjectPath {
+  id: string;
+  project_id: string;
+  path: string;
+  label: string;
+  created_at: string;
+}
+
+interface TodoFolder {
+  path: string;
+  name: string;
+  content: string;
+  lastModified?: string;
+}
 
 interface TodosTabProps {
   projectPath: string;
+  projectId: string;
 }
 
-const PRIORITY_STYLES = {
-  low: 'bg-gray-600/20 text-gray-400',
-  medium: 'bg-yellow-600/20 text-yellow-400',
-  high: 'bg-orange-600/20 text-orange-400',
-  critical: 'bg-red-600/20 text-red-400',
-};
-
-const STATUS_STYLES = {
-  pending: 'bg-yellow-600/20 text-yellow-400',
-  in_progress: 'bg-blue-600/20 text-blue-400',
-  completed: 'bg-green-600/20 text-green-400',
-  cancelled: 'bg-gray-600/20 text-gray-500',
-};
-
-export default function TodosTab({ projectPath }: TodosTabProps) {
-  const [todos, setTodos] = useState<Todo[]>([]);
+export default function TodosTab({ projectPath, projectId }: TodosTabProps) {
+  const [projectPaths, setProjectPaths] = useState<ProjectPath[]>([]);
+  const [selectedPath, setSelectedPath] = useState<ProjectPath | null>(null);
+  const [folders, setFolders] = useState<Record<string, TodoFolder>>({});
+  const [folderCount, setFolderCount] = useState(0);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [scannedAt, setScannedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    priority: 'medium' as Todo['priority'],
-    status: 'pending' as Todo['status'],
-  });
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [isScanning, setIsScanning] = useState(false);
 
+  // Fetch project paths
   useEffect(() => {
-    fetchTodos();
-  }, [projectPath]);
+    fetchProjectPaths();
+  }, [projectId]);
 
-  const fetchTodos = async () => {
+  // Fetch todos when path changes
+  useEffect(() => {
+    if (selectedPath) {
+      fetchTodos(selectedPath.path);
+    }
+  }, [selectedPath]);
+
+  const fetchProjectPaths = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/susan/todos?project=${encodeURIComponent(projectPath)}`);
+      const response = await fetch(`/api/project-paths?project_id=${projectId}`);
       const data = await response.json();
       if (data.success) {
-        setTodos(data.todos || []);
+        setProjectPaths(data.paths || []);
+        const mainPath = data.paths?.find((p: ProjectPath) => p.path === projectPath);
+        if (mainPath) {
+          setSelectedPath(mainPath);
+        } else if (data.paths?.length > 0) {
+          setSelectedPath(data.paths[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching project paths:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchTodos = async (path: string) => {
+    setIsLoading(true);
+    try {
+      const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+      const response = await fetch(`/api/clair/todos/${cleanPath}`);
+      const data = await response.json();
+      if (data.success) {
+        setFolders(data.folders || {});
+        setFolderCount(data.folderCount || 0);
+        setTotalFiles(data.totalFiles || 0);
+        setScannedAt(data.scannedAt);
+        setExpandedFolders(new Set(Object.keys(data.folders || {})));
       }
     } catch (error) {
       console.error('Error fetching todos:', error);
@@ -52,222 +87,168 @@ export default function TodosTab({ projectPath }: TodosTabProps) {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const rescan = async () => {
+    if (!selectedPath) return;
+    setIsScanning(true);
     try {
-      const url = editingTodo
-        ? `/api/susan/todo/${editingTodo.id}`
-        : '/api/susan/todo';
-      const method = editingTodo ? 'PATCH' : 'POST';
+      const cleanPath = selectedPath.path.startsWith('/') ? selectedPath.path.slice(1) : selectedPath.path;
+      await fetch(`/api/clair/todos/${cleanPath}/scan`, { method: 'POST' });
+      await fetchTodos(selectedPath.path);
+    } catch (error) {
+      console.error('Error rescanning:', error);
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          project_path: projectPath,
-        }),
-      });
-
-      if (response.ok) {
-        fetchTodos();
-        setShowForm(false);
-        setEditingTodo(null);
-        setFormData({ title: '', description: '', priority: 'medium', status: 'pending' });
+  const toggleFolder = (path: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
       }
-    } catch (error) {
-      console.error('Error saving todo:', error);
-    }
-  };
-
-  const handleStatusChange = async (todo: Todo, newStatus: Todo['status']) => {
-    try {
-      await fetch(`/api/susan/todo/${todo.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      fetchTodos();
-    } catch (error) {
-      console.error('Error updating todo:', error);
-    }
-  };
-
-  const handleEdit = (todo: Todo) => {
-    setEditingTodo(todo);
-    setFormData({
-      title: todo.title,
-      description: todo.description || '',
-      priority: todo.priority,
-      status: todo.status,
+      return next;
     });
-    setShowForm(true);
   };
 
-  const handleDelete = async (todo: Todo) => {
-    if (!confirm('Delete this todo?')) return;
-    try {
-      await fetch(`/api/susan/todo/${todo.id}`, { method: 'DELETE' });
-      fetchTodos();
-    } catch (error) {
-      console.error('Error deleting todo:', error);
-    }
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString();
   };
 
-  if (isLoading) {
+  if (isLoading && !selectedPath) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin text-2xl">⏳</div>
+        <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
       </div>
     );
   }
 
+  const folderEntries = Object.entries(folders);
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Todos</h2>
-        <button
-          onClick={() => {
-            setEditingTodo(null);
-            setFormData({ title: '', description: '', priority: 'medium', status: 'pending' });
-            setShowForm(true);
-          }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Todo
-        </button>
+    <div className="flex h-full gap-4">
+      {/* Left Panel - Project Folders */}
+      <div className="w-64 flex-shrink-0 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+        <div className="p-3 border-b border-gray-700">
+          <h3 className="text-white font-semibold text-sm">Project Folders</h3>
+        </div>
+
+        <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
+          {projectPaths.length === 0 ? (
+            <div className="p-4 text-center text-gray-500 text-sm">
+              <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No folders linked</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-700">
+              {projectPaths.map(path => (
+                <div
+                  key={path.id}
+                  className={`p-3 cursor-pointer ${
+                    selectedPath?.id === path.id
+                      ? 'bg-blue-600/20 border-l-2 border-blue-500'
+                      : 'hover:bg-gray-750'
+                  }`}
+                  onClick={() => setSelectedPath(path)}
+                >
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className={`w-4 h-4 ${
+                      selectedPath?.id === path.id ? 'text-blue-400' : 'text-yellow-400'
+                    }`} />
+                    <span className="text-white font-medium text-sm">{path.label}</span>
+                  </div>
+                  <p className="text-gray-600 text-[10px] font-mono mt-1 pl-6 truncate">
+                    {path.path.split('/').pop()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Todo Form */}
-      {showForm && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-3">
-              <input
-                type="text"
-                placeholder="Todo title"
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                required
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-              />
-              <textarea
-                placeholder="Description (optional)"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={2}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none resize-none"
-              />
-              <div className="flex gap-3">
-                <select
-                  value={formData.priority}
-                  onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value as Todo['priority'] }))}
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="critical">Critical</option>
-                </select>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as Todo['status'] }))}
-                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+      {/* Right Panel - TODOs */}
+      <div className="flex-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+        {selectedPath ? (
+          <>
+            <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-semibold text-sm">{selectedPath.label} TODOs</h3>
+                <p className="text-gray-500 text-xs">
+                  {totalFiles} file{totalFiles !== 1 ? 's' : ''} in {folderCount} folder{folderCount !== 1 ? 's' : ''}
+                </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3">
+                {scannedAt && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {formatDate(scannedAt)}
+                  </span>
+                )}
                 <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                  onClick={rescan}
+                  disabled={isScanning}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded text-sm"
                 >
-                  {editingTodo ? 'Update' : 'Add'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingTodo(null);
-                  }}
-                  className="px-4 py-2 text-gray-400 hover:text-white"
-                >
-                  Cancel
+                  <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
+                  Rescan
                 </button>
               </div>
             </div>
-          </form>
-        </div>
-      )}
 
-      {/* Todo List */}
-      {todos.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No todos yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {todos.map(todo => (
-            <div
-              key={todo.id}
-              className={`bg-gray-800 border border-gray-700 rounded-lg p-3 ${
-                todo.status === 'completed' ? 'opacity-60' : ''
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <button
-                    onClick={() => handleStatusChange(todo, todo.status === 'completed' ? 'pending' : 'completed')}
-                    className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-                      todo.status === 'completed'
-                        ? 'bg-green-600 border-green-600 text-white'
-                        : 'border-gray-600 hover:border-green-500'
-                    }`}
-                  >
-                    {todo.status === 'completed' && <Check className="w-3 h-3" />}
-                  </button>
-                  <div>
-                    <h3 className={`text-white font-medium ${todo.status === 'completed' ? 'line-through' : ''}`}>
-                      {todo.title}
-                    </h3>
-                    {todo.description && (
-                      <p className="text-gray-400 text-sm mt-1">{todo.description}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${PRIORITY_STYLES[todo.priority]}`}>
-                        {todo.priority}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-xs ${STATUS_STYLES[todo.status]}`}>
-                        {todo.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
+            <div className="overflow-y-auto p-3 max-h-[calc(100vh-300px)]">
+              {folderEntries.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No TODO.md files found</p>
+                  <p className="text-xs mt-1">Create TODO.md files in subfolders</p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleEdit(todo)}
-                    className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => handleDelete(todo)}
-                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+              ) : (
+                <div className="space-y-2">
+                  {folderEntries.map(([path, folder]) => {
+                    const isExpanded = expandedFolders.has(path);
+                    return (
+                      <div
+                        key={path}
+                        className="bg-gray-750 border border-gray-700 rounded-lg overflow-hidden"
+                      >
+                        <div
+                          className="p-3 cursor-pointer hover:bg-gray-700 flex items-center gap-3"
+                          onClick={() => toggleFolder(path)}
+                        >
+                          <button className="text-gray-500">
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                          <FileText className="w-4 h-4 text-blue-400" />
+                          <span className="text-white font-medium text-sm">{folder.name}</span>
+                          <span className="text-gray-600 text-xs font-mono">{path}</span>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="border-t border-gray-700 p-4 bg-gray-800">
+                            <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
+                              {folder.content || '(Empty TODO.md file)'}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="text-center">
+              <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Select a folder to view TODOs</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
