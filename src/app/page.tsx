@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { DoorOpen } from 'lucide-react';
+import { DoorOpen, Map } from 'lucide-react';
 
 // Contexts & Hooks
 import { useUser, useMinRole } from './contexts/UserContext';
@@ -687,7 +687,7 @@ User: The Boss`;
               }`}
               title="Project Roadmap"
             >
-              🗺️
+              <Map size={20} />
             </button>
           </div>
 
