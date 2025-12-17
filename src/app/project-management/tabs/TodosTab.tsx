@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RefreshCw, FolderOpen, FileText, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, ChevronDown, ChevronRight, ChevronUp, Clock } from 'lucide-react';
 
 interface ProjectPath {
   id: string;
   project_id: string;
   path: string;
   label: string;
+  sort_order: number;
   created_at: string;
 }
 
@@ -117,6 +118,42 @@ export default function TodosTab({ projectPath, projectId }: TodosTabProps) {
     return new Date(dateStr).toLocaleString();
   };
 
+  const moveFolder = async (folderId: string, direction: 'up' | 'down') => {
+    const currentIndex = projectPaths.findIndex(p => p.id === folderId);
+    if (currentIndex === -1) return;
+
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (swapIndex < 0 || swapIndex >= projectPaths.length) return;
+
+    const currentFolder = projectPaths[currentIndex];
+    const swapFolder = projectPaths[swapIndex];
+
+    // Optimistic update
+    const newPaths = [...projectPaths];
+    newPaths[currentIndex] = { ...swapFolder, sort_order: currentFolder.sort_order };
+    newPaths[swapIndex] = { ...currentFolder, sort_order: swapFolder.sort_order };
+    newPaths.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    setProjectPaths(newPaths);
+
+    try {
+      await Promise.all([
+        fetch('/api/project-paths', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentFolder.id, sort_order: swapFolder.sort_order || swapIndex }),
+        }),
+        fetch('/api/project-paths', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: swapFolder.id, sort_order: currentFolder.sort_order || currentIndex }),
+        }),
+      ]);
+    } catch (error) {
+      console.error('Error moving folder:', error);
+      fetchProjectPaths(); // Revert on error
+    }
+  };
+
   if (isLoading && !selectedPath) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -143,10 +180,10 @@ export default function TodosTab({ projectPath, projectId }: TodosTabProps) {
             </div>
           ) : (
             <div className="divide-y divide-gray-700">
-              {projectPaths.map(path => (
+              {projectPaths.map((path, index) => (
                 <div
                   key={path.id}
-                  className={`p-3 cursor-pointer ${
+                  className={`p-3 cursor-pointer group ${
                     selectedPath?.id === path.id
                       ? 'bg-blue-600/20 border-l-2 border-blue-500'
                       : 'hover:bg-gray-750'
@@ -154,12 +191,31 @@ export default function TodosTab({ projectPath, projectId }: TodosTabProps) {
                   onClick={() => setSelectedPath(path)}
                 >
                   <div className="flex items-center gap-2">
+                    {/* Move buttons */}
+                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveFolder(path.id, 'up'); }}
+                        disabled={index === 0}
+                        className={`p-0.5 rounded ${index === 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-600'}`}
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveFolder(path.id, 'down'); }}
+                        disabled={index === projectPaths.length - 1}
+                        className={`p-0.5 rounded ${index === projectPaths.length - 1 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-white hover:bg-gray-600'}`}
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                    </div>
                     <FolderOpen className={`w-4 h-4 ${
                       selectedPath?.id === path.id ? 'text-blue-400' : 'text-yellow-400'
                     }`} />
-                    <span className="text-white font-medium text-sm">{path.label}</span>
+                    <span className="text-white font-medium text-sm flex-1">{path.label}</span>
                   </div>
-                  <p className="text-gray-600 text-[10px] font-mono mt-1 pl-6 truncate">
+                  <p className="text-gray-600 text-[10px] font-mono mt-1 pl-12 truncate">
                     {path.path.split('/').pop()}
                   </p>
                 </div>

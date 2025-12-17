@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       .from('dev_project_paths')
       .select('*')
       .eq('project_id', projectId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('label', { ascending: true });
 
     if (error) {
@@ -115,7 +116,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, label } = body;
+    const { id, label, sort_order } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -123,6 +124,7 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Record<string, any> = {};
     if (label !== undefined) updateData.label = label;
+    if (sort_order !== undefined) updateData.sort_order = sort_order;
 
     const { data: updated, error } = await supabase
       .from('dev_project_paths')
