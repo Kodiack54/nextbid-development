@@ -24,6 +24,7 @@ import {
   DocsPanel,
   ClaudeTerminal,
   SystemHealthPanel,
+  RoadmapPanel,
 } from '../components/panels';
 import ProjectManagementPanel from './project-management/ProjectManagementPanel';
 import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
@@ -84,6 +85,7 @@ export default function DevEnvironmentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
+  const [showRoadmap, setShowRoadmap] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
   // Toggle between Claude (Sonnet) and Chad (Haiku)
@@ -674,6 +676,21 @@ User: The Boss`;
             onPanelChange={(panel) => setActivePanel(panel as typeof activePanel)}
           />
 
+          {/* Roadmap Button - Floating Panel */}
+          <div className="mt-2 pt-2 border-t border-gray-700">
+            <button
+              onClick={() => setShowRoadmap(!showRoadmap)}
+              className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                showRoadmap
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+              }`}
+              title="Project Roadmap"
+            >
+              🗺️
+            </button>
+          </div>
+
           <div className="flex-1" />
 
           {selectedProject?.is_locked && (
@@ -851,6 +868,12 @@ User: The Boss`;
               onClose={() => setShowSummaryModal(false)}
             />
           )}
+
+          {/* Roadmap Floating Panel */}
+          <RoadmapPanel
+            isOpen={showRoadmap}
+            onClose={() => setShowRoadmap(false)}
+          />
         </div>
       </div>
     </div>

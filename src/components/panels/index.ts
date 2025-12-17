@@ -11,3 +11,4 @@ export { ProjectManagerPanel } from './ProjectManagerPanel';
 export { DocsPanel } from './DocsPanel';
 export { ClaudeTerminal } from './ClaudeTerminal';
 export { SystemHealthPanel } from './SystemHealthPanel';
+export { RoadmapPanel } from './RoadmapPanel';
