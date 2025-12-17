@@ -158,21 +158,21 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
 
     switch (activeTab) {
       case 'todos':
-        return <TodosTab projectPath={projectPath} />;
+        return <TodosTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'knowledge':
-        return <KnowledgeTab projectPath={projectPath} />;
+        return <KnowledgeTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'docs':
-        return <DocsTab projectPath={projectPath} />;
+        return <DocsTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'database':
-        return <DatabaseTab projectPath={projectPath} tablePrefix={selectedProject.table_prefix} />;
+        return <DatabaseTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'structure':
         return <StructureTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'code-changes':
-        return <CodeChangesTab projectPath={projectPath} />;
+        return <CodeChangesTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'notepad':
         return <NotepadTab projectPath={projectPath} />;
       case 'bugs':
-        return <BugsTab projectPath={projectPath} />;
+        return <BugsTab projectPath={projectPath} projectId={selectedProject.id} />;
       default:
         return null;
     }
