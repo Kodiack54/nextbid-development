@@ -12,7 +12,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const apiPath = path.join('/');
+  // First segment is API endpoint, rest is project path that needs encoding
+  const [endpoint, ...projectParts] = path;
+  const projectPath = projectParts.length > 0
+    ? '/' + encodeURIComponent('/' + projectParts.join('/'))
+    : '';
+  const apiPath = endpoint + projectPath;
   const url = new URL(request.url);
   const queryString = url.search;
 
@@ -38,7 +43,11 @@ export async function POST(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const apiPath = path.join('/');
+  const [endpoint, ...projectParts] = path;
+  const projectPath = projectParts.length > 0
+    ? '/' + encodeURIComponent('/' + projectParts.join('/'))
+    : '';
+  const apiPath = endpoint + projectPath;
 
   try {
     const body = await request.json();
@@ -65,7 +74,11 @@ export async function PATCH(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const apiPath = path.join('/');
+  const [endpoint, ...projectParts] = path;
+  const projectPath = projectParts.length > 0
+    ? '/' + encodeURIComponent('/' + projectParts.join('/'))
+    : '';
+  const apiPath = endpoint + projectPath;
 
   try {
     const body = await request.json();
@@ -92,7 +105,11 @@ export async function DELETE(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const apiPath = path.join('/');
+  const [endpoint, ...projectParts] = path;
+  const projectPath = projectParts.length > 0
+    ? '/' + encodeURIComponent('/' + projectParts.join('/'))
+    : '';
+  const apiPath = endpoint + projectPath;
 
   try {
     const response = await fetch(`${CLAIR_URL}/api/${apiPath}`, {
