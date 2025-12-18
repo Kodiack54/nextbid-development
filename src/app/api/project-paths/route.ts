@@ -18,8 +18,7 @@ export async function GET(request: NextRequest) {
       .from('dev_project_paths')
       .select('*')
       .eq('project_id', projectId)
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('label', { ascending: true });
+      .order('sort_order', { ascending: true });
 
     if (error) {
       console.error('Error fetching project paths:', error);
