@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/sessions/messages
@@ -19,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'session_id is required' }, { status: 400 });
     }
 
-    const { data: messages, error } = await supabase
+    const { data: messages, error } = await db
       .from('dev_chat_messages')
       .select('*')
       .eq('session_id', sessionId)
@@ -65,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: message, error } = await supabase
+    const { data: message, error } = await db
       .from('dev_chat_messages')
       .insert({
         session_id,

@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/pipeline-status
@@ -16,7 +11,7 @@ export async function GET() {
     // Helper to safely get count
     const getCount = async (table: string, filter?: { column: string; op: 'is' | 'not'; value: null }) => {
       try {
-        let query = supabase.from(table).select('id', { count: 'exact', head: true });
+        let query = db.from(table).select('id', { count: 'exact', head: true });
         if (filter) {
           if (filter.op === 'is') {
             query = query.is(filter.column, filter.value);
@@ -54,13 +49,13 @@ export async function GET() {
     ]);
 
     // Get recent activity
-    const { data: recentKnowledge } = await supabase
+    const { data: recentKnowledge } = await db
       .from('dev_ai_knowledge')
       .select('title, category, created_at')
       .order('created_at', { ascending: false })
       .limit(5);
 
-    const { data: recentTodos } = await supabase
+    const { data: recentTodos } = await db
       .from('dev_ai_todos')
       .select('title, status, created_at')
       .order('created_at', { ascending: false })

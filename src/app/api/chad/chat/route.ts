@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 // Claude Haiku pricing (Chad uses Claude for chat)
 const HAIKU_PRICING = { input: 0.25, output: 1.25 }; // per 1M tokens
@@ -33,7 +28,7 @@ export async function POST(request: NextRequest) {
     const costUsd = (inputTokens / 1_000_000) * HAIKU_PRICING.input +
                     (outputTokens / 1_000_000) * HAIKU_PRICING.output;
 
-    await supabase.from('dev_ai_usage').insert({
+    await db.from('dev_ai_usage').insert({
       user_id: body.user_id || 'anonymous',
       project_id: body.project_id || null,
       model: 'claude-3-haiku',

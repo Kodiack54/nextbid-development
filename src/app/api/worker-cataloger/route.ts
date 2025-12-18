@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -25,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Get worker state (last processed times per project)
-    const { data: workerState } = await supabase
+    const { data: workerState } = await db
       .from('dev_worker_state')
       .select('*')
       .eq('worker_key', WORKER_STATE_KEY)
@@ -34,7 +29,7 @@ export async function POST(request: NextRequest) {
     const lastProcessed: Record<string, string> = workerState?.state || {};
 
     // Get all active sessions with new messages
-    const { data: activeSessions } = await supabase
+    const { data: activeSessions } = await db
       .from('dev_chat_sessions')
       .select('id, project_id, user_id')
       .eq('status', 'active');
@@ -62,7 +57,7 @@ export async function POST(request: NextRequest) {
       const lastTime = lastProcessed[session.project_id] || '1970-01-01T00:00:00Z';
 
       // Get new messages since last processing
-      const { data: newMessages } = await supabase
+      const { data: newMessages } = await db
         .from('dev_chat_messages')
         .select('role, content, created_at')
         .eq('session_id', session.id)
@@ -74,7 +69,7 @@ export async function POST(request: NextRequest) {
       console.log(`Processing ${newMessages.length} new messages for project ${session.project_id}`);
 
       // Get project info
-      const { data: project } = await supabase
+      const { data: project } = await db
         .from('dev_projects')
         .select('*')
         .eq('id', session.project_id)
@@ -83,7 +78,7 @@ export async function POST(request: NextRequest) {
       if (!project) continue;
 
       // Get existing project knowledge
-      const { data: existingKnowledge } = await supabase
+      const { data: existingKnowledge } = await db
         .from('dev_project_knowledge')
         .select('*')
         .eq('project_id', session.project_id)
@@ -130,7 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save worker state
-    await supabase
+    await db
       .from('dev_worker_state')
       .upsert({
         worker_key: WORKER_STATE_KEY,
@@ -380,7 +375,7 @@ async function upsertProjectKnowledge(
   knowledge: Record<string, unknown>,
   sessionId: string
 ) {
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('dev_project_knowledge')
     .select('id')
     .eq('project_id', projectId)
@@ -397,12 +392,12 @@ async function upsertProjectKnowledge(
   };
 
   if (existing) {
-    await supabase
+    await db
       .from('dev_project_knowledge')
       .update(record)
       .eq('id', existing.id);
   } else {
-    await supabase
+    await db
       .from('dev_project_knowledge')
       .insert(record);
   }
@@ -447,7 +442,7 @@ async function updateProjectDocs(
  */
 async function saveProjectDoc(projectId: string, docType: string, title: string, content: string) {
   // Get current version
-  const { data: current } = await supabase
+  const { data: current } = await db
     .from('dev_project_docs')
     .select('id, version')
     .eq('project_id', projectId)
@@ -458,7 +453,7 @@ async function saveProjectDoc(projectId: string, docType: string, title: string,
 
   const newVersion = (current?.version || 0) + 1;
 
-  await supabase.from('dev_project_docs').insert({
+  await db.from('dev_project_docs').insert({
     project_id: projectId,
     doc_type: docType,
     title,
@@ -604,7 +599,7 @@ async function createTicketsFromFindings(
   const projectSlug = project.slug || project.name;
 
   // Get user info for reporter
-  const { data: user } = await supabase
+  const { data: user } = await db
     .from('dev_users')
     .select('name')
     .eq('id', userId)
@@ -622,7 +617,7 @@ async function createTicketsFromFindings(
   for (const todo of todos) {
     if (todo.priority === 'critical' || todo.priority === 'high') {
       // Check if similar ticket exists
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('dev_system_tickets')
         .select('id')
         .eq('project', projectSlug)
@@ -632,7 +627,7 @@ async function createTicketsFromFindings(
         .single();
 
       if (!existing) {
-        await supabase.from('dev_system_tickets').insert({
+        await db.from('dev_system_tickets').insert({
           title: todo.task,
           description: `Auto-generated from dev session.\n\nPriority: ${todo.priority}`,
           status: 'open',
@@ -656,7 +651,7 @@ async function createTicketsFromFindings(
 
   for (const blocker of blockers) {
     if (!blocker.resolved) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('dev_system_tickets')
         .select('id')
         .eq('project', projectSlug)
@@ -666,7 +661,7 @@ async function createTicketsFromFindings(
         .single();
 
       if (!existing) {
-        await supabase.from('dev_system_tickets').insert({
+        await db.from('dev_system_tickets').insert({
           title: `BLOCKER: ${blocker.issue}`,
           description: `Auto-generated blocker from dev session.\n\n${blocker.solution ? `Potential solution: ${blocker.solution}` : 'No solution identified yet.'}`,
           status: 'open',
@@ -725,7 +720,7 @@ async function checkAndCreateAlerts(
 
     if (potentialConflict && newDec.impact === 'high') {
       // Create an incident for high-impact conflicting decisions
-      await supabase.from('dev_incidents').insert({
+      await db.from('dev_incidents').insert({
         project_id: projectId,
         title: `Potential Decision Conflict`,
         description: `New decision may conflict with existing:\n\nNEW: ${newDec.decision}\n\nEXISTING: ${potentialConflict.decision}`,
@@ -744,7 +739,7 @@ async function checkAndCreateAlerts(
     contextUpdate.toLowerCase().includes('breaking change') ||
     contextUpdate.toLowerCase().includes('architecture change')
   )) {
-    await supabase.from('dev_incidents').insert({
+    await db.from('dev_incidents').insert({
       project_id: projectId,
       title: `Documentation May Be Stale`,
       description: `Major changes detected that may require documentation update:\n\n${contextUpdate}`,
@@ -763,7 +758,7 @@ async function checkAndCreateAlerts(
  * Check worker status and last run info
  */
 export async function GET() {
-  const { data: workerState } = await supabase
+  const { data: workerState } = await db
     .from('dev_worker_state')
     .select('*')
     .eq('worker_key', WORKER_STATE_KEY)

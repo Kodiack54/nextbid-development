@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/project-docs
@@ -20,7 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    let query = supabase
+    let query = db
       .from('dev_project_docs')
       .select('*')
       .eq('project_id', projectId)
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if doc exists first
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('dev_project_docs')
       .select('id')
       .eq('project_id', project_id)
@@ -73,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       // Update existing doc
-      const result = await supabase
+      const result = await db
         .from('dev_project_docs')
         .update({
           content,
@@ -87,7 +82,7 @@ export async function POST(request: NextRequest) {
       error = result.error;
     } else {
       // Insert new doc
-      const result = await supabase
+      const result = await db
         .from('dev_project_docs')
         .insert({
           project_id,

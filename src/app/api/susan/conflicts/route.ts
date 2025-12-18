@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/susan/conflicts
@@ -16,7 +11,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'pending';
     const projectPath = searchParams.get('project_path');
 
-    let query = supabase
+    let query = db
       .from('dev_ai_conflicts')
       .select('*')
       .order('created_at', { ascending: false });
@@ -37,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get pending count
-    const { count: pendingCount } = await supabase
+    const { count: pendingCount } = await db
       .from('dev_ai_conflicts')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
@@ -71,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the conflict
-    const { data: conflict, error: fetchErr } = await supabase
+    const { data: conflict, error: fetchErr } = await db
       .from('dev_ai_conflicts')
       .select('*')
       .eq('id', conflict_id)
@@ -114,7 +109,7 @@ export async function POST(request: NextRequest) {
         };
       }
 
-      const { error: insertErr } = await supabase
+      const { error: insertErr } = await db
         .from(tableName)
         .insert(insertData);
 
@@ -125,7 +120,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Mark conflict as resolved
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await db
       .from('dev_ai_conflicts')
       .update({
         status: 'resolved',

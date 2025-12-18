@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 const BUCKET_NAME = 'project-files';
 
@@ -24,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const path = folder ? `${projectId}/${folder}` : projectId;
 
-    const { data: files, error } = await supabase.storage
+    const { data: files, error } = await db.storage
       .from(BUCKET_NAME)
       .list(path, {
         sortBy: { column: 'name', order: 'asc' },
@@ -38,7 +33,7 @@ export async function GET(request: NextRequest) {
     // Get public URLs for each file
     const filesWithUrls = files?.map(file => {
       const filePath = folder ? `${projectId}/${folder}/${file.name}` : `${projectId}/${file.name}`;
-      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+      const { data: urlData } = db.storage.from(BUCKET_NAME).getPublicUrl(filePath);
 
       return {
         ...file,
@@ -81,7 +76,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await db.storage
       .from(BUCKET_NAME)
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -94,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+    const { data: urlData } = db.storage.from(BUCKET_NAME).getPublicUrl(filePath);
 
     return NextResponse.json({
       success: true,
@@ -125,7 +120,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'path is required' }, { status: 400 });
     }
 
-    const { error } = await supabase.storage
+    const { error } = await db.storage
       .from(BUCKET_NAME)
       .remove([path]);
 

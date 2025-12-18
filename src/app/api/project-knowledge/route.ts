@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/project-knowledge
@@ -20,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     // If project_id provided, look up the project_path
     if (projectId && !projectPath) {
-      const { data: project } = await supabase
+      const { data: project } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', projectId)
@@ -35,7 +30,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'project_id or project_path is required' }, { status: 400 });
     }
 
-    let query = supabase
+    let query = db
       .from('dev_ai_knowledge')
       .select('*')
       .eq('project_path', projectPath)
@@ -75,7 +70,7 @@ export async function POST(request: NextRequest) {
     // Resolve project_path from project_id if needed
     let resolvedPath = project_path;
     if (project_id && !resolvedPath) {
-      const { data: project } = await supabase
+      const { data: project } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', project_id)
@@ -90,7 +85,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'project_path (or project_id), category, and title are required' }, { status: 400 });
     }
 
-    const { data: item, error } = await supabase
+    const { data: item, error } = await db
       .from('dev_ai_knowledge')
       .insert({
         project_path: resolvedPath,
@@ -131,7 +126,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('dev_ai_knowledge')
       .delete()
       .eq('id', id);

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -27,7 +22,7 @@ export async function POST(request: NextRequest) {
     console.log(`📝 Updating ${doc_type || 'all'} docs for project:`, project_id);
 
     // Get project info
-    const { data: project } = await supabase
+    const { data: project } = await db
       .from('dev_projects')
       .select('*')
       .eq('id', project_id)
@@ -38,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get recent session scrubbing data
-    let query = supabase
+    let query = db
       .from('dev_session_scrubbing')
       .select('extracted_data, created_at')
       .eq('project_id', project_id)
@@ -46,7 +41,7 @@ export async function POST(request: NextRequest) {
       .limit(10);
 
     if (session_scrubbing_ids?.length) {
-      query = supabase
+      query = db
         .from('dev_session_scrubbing')
         .select('extracted_data, created_at')
         .in('id', session_scrubbing_ids);
@@ -65,7 +60,7 @@ export async function POST(request: NextRequest) {
     const aggregatedData = aggregateSessionData(scrubbingResults);
 
     // Get existing project knowledge
-    const { data: existingKnowledge } = await supabase
+    const { data: existingKnowledge } = await db
       .from('dev_project_knowledge')
       .select('*')
       .eq('project_id', project_id)
@@ -117,12 +112,12 @@ export async function POST(request: NextRequest) {
     };
 
     if (existingKnowledge) {
-      await supabase
+      await db
         .from('dev_project_knowledge')
         .update(knowledgeUpdate)
         .eq('id', existingKnowledge.id);
     } else {
-      await supabase
+      await db
         .from('dev_project_knowledge')
         .insert(knowledgeUpdate);
     }
@@ -293,7 +288,7 @@ Return raw markdown.`;
  */
 async function saveDocVersion(projectId: string, docType: string, title: string, content: string) {
   try {
-    await supabase.from('dev_project_docs').insert({
+    await db.from('dev_project_docs').insert({
       project_id: projectId,
       doc_type: docType,
       title,
@@ -320,7 +315,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get project knowledge
-    const { data: knowledge } = await supabase
+    const { data: knowledge } = await db
       .from('dev_project_knowledge')
       .select('*')
       .eq('project_id', projectId)

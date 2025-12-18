@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 interface ProjectSummary {
   project_id: string;
@@ -41,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     // If project_id provided, look up the server_path
     if (projectId && !projectPath) {
-      const { data: project } = await supabase
+      const { data: project } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', projectId)
@@ -53,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all projects with their paths for mapping
-    const { data: projects } = await supabase
+    const { data: projects } = await db
       .from('dev_projects')
       .select('id, name, slug, server_path')
       .eq('is_active', true);
@@ -101,53 +96,53 @@ async function getProjectSummary(projectPath: string): Promise<ProjectSummary> {
     { data: lastSession }
   ] = await Promise.all([
     // Pending sessions
-    supabase
+    db
       .from('dev_ai_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending_review')
       .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`),
 
     // Processed sessions
-    supabase
+    db
       .from('dev_ai_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'processed')
       .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`),
 
     // Pending todos
-    supabase
+    db
       .from('dev_ai_todos')
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath)
       .eq('status', 'pending'),
 
     // Completed todos
-    supabase
+    db
       .from('dev_ai_todos')
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath)
       .eq('status', 'completed'),
 
     // Knowledge items
-    supabase
+    db
       .from('dev_ai_knowledge')
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath),
 
     // Bugs
-    supabase
+    db
       .from('dev_ai_bugs')
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath),
 
     // Code changes
-    supabase
+    db
       .from('dev_ai_code_changes')
       .select('*', { count: 'exact', head: true })
       .eq('project_path', projectPath),
 
     // Last activity
-    supabase
+    db
       .from('dev_ai_sessions')
       .select('started_at')
       .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`)

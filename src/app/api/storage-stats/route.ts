@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 interface BucketStats {
   name: string;
@@ -24,7 +19,7 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get('project_id');
 
     // List all buckets
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    const { data: buckets, error: bucketsError } = await db.storage.listBuckets();
 
     if (bucketsError) {
       console.error('Error listing buckets:', bucketsError);
@@ -154,7 +149,7 @@ async function listAllFiles(
   path: string,
   allFiles: Array<{ name: string; path: string; metadata: any }> = []
 ): Promise<Array<{ name: string; path: string; metadata: any }>> {
-  const { data: files, error } = await supabase.storage
+  const { data: files, error } = await db.storage
     .from(bucketName)
     .list(path, { limit: 1000 });
 

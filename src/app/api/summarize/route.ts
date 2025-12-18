@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 // OpenAI pricing (per 1M tokens)
 const OPENAI_PRICING: Record<string, { input: number; output: number }> = {
@@ -37,7 +32,7 @@ export async function POST(request: NextRequest) {
     // If session_id provided, fetch messages from DB
     let chatMessages = messages;
     if (session_id && !messages) {
-      const { data: dbMessages, error } = await supabase
+      const { data: dbMessages, error } = await db
         .from('dev_chat_messages')
         .select('role, content')
         .eq('session_id', session_id)
@@ -110,7 +105,7 @@ Be concise but comprehensive. Focus on technical details that would help continu
     // If session_id provided, save to database
     if (session_id) {
       // Update session with summary
-      await supabase
+      await db
         .from('dev_chat_sessions')
         .update({
           summary: parsed.summary,
@@ -122,7 +117,7 @@ Be concise but comprehensive. Focus on technical details that would help continu
         .eq('id', session_id);
 
       // Save detailed summary
-      await supabase.from('dev_session_summaries').insert({
+      await db.from('dev_session_summaries').insert({
         session_id,
         summary: parsed.summary,
         key_points: parsed.keyPoints,

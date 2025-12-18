@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/sessions
@@ -18,7 +13,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status'); // active, ended, archived
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    let query = supabase
+    let query = db
       .from('dev_chat_sessions')
       .select(`
         *,
@@ -71,14 +66,14 @@ export async function POST(request: NextRequest) {
     }
 
     // End any active sessions for this user first
-    await supabase
+    await db
       .from('dev_chat_sessions')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
       .eq('user_id', user_id)
       .eq('status', 'active');
 
     // Create new session
-    const { data: session, error } = await supabase
+    const { data: session, error } = await db
       .from('dev_chat_sessions')
       .insert({
         user_id,
@@ -135,7 +130,7 @@ export async function PATCH(request: NextRequest) {
       updates.summary_generated_at = new Date().toISOString();
     }
 
-    const { data: session, error } = await supabase
+    const { data: session, error } = await db
       .from('dev_chat_sessions')
       .update(updates)
       .eq('id', session_id)

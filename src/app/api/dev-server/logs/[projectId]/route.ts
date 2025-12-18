@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 /**
  * GET /api/dev-server/logs/[projectId]
@@ -25,7 +20,7 @@ export async function GET(
     const lines = parseInt(searchParams.get('lines') || '100', 10);
 
     // Get project
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('dev_projects')
       .select('pm2_process_name, name, slug')
       .eq('id', projectId)

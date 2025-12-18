@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 // Claude pricing (per 1M tokens)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -54,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query without foreign key joins (relationships may not exist)
-    let query = supabase
+    let query = db
       .from('dev_ai_usage')
       .select('*')
       .gte('created_at', startDate.toISOString())
@@ -148,7 +143,7 @@ export async function GET(request: NextRequest) {
       byAssistant[assistantKey].cost += parseFloat(row.cost_usd) || 0;
     });
 
-    const { data: budgets } = await supabase
+    const { data: budgets } = await db
       .from('dev_ai_budgets')
       .select('*')
       .eq('is_active', true);
@@ -224,7 +219,7 @@ export async function POST(request: NextRequest) {
 
     const cost_usd = calculateCost(model, input_tokens, output_tokens);
 
-    const { data: budgets } = await supabase
+    const { data: budgets } = await db
       .from('dev_ai_budgets')
       .select('*')
       .eq('is_active', true);
@@ -235,7 +230,7 @@ export async function POST(request: NextRequest) {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const { data: monthUsage } = await supabase
+    const { data: monthUsage } = await db
       .from('dev_ai_usage')
       .select('cost_usd')
       .gte('created_at', startOfMonth.toISOString());
@@ -260,7 +255,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: usage, error } = await supabase
+    const { data: usage, error } = await db
       .from('dev_ai_usage')
       .insert({
         user_id,

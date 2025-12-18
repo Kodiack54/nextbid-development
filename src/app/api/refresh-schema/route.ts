@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 // Known prefixes to scan for - add more as needed
 const KNOWN_PREFIXES = [
@@ -51,7 +46,7 @@ export async function POST() {
       let columns: any[] | null = null;
 
       try {
-        const result = await supabase.rpc('get_columns_for_prefix', { prefix });
+        const result = await db.rpc('get_columns_for_prefix', { prefix });
         if (result.data && result.data.length > 0) {
           columns = result.data;
         }
@@ -89,7 +84,7 @@ export async function POST() {
     }
 
     // Get existing projects
-    const { data: existingProjects } = await supabase
+    const { data: existingProjects } = await db
       .from('dev_projects')
       .select('id, name, table_prefix, is_active');
 
@@ -102,7 +97,7 @@ export async function POST() {
 
       if (existingProject) {
         // Update existing project
-        const { error } = await supabase
+        const { error } = await db
           .from('dev_projects')
           .update({ database_schema: data.schema })
           .eq('id', existingProject.id);
@@ -112,7 +107,7 @@ export async function POST() {
         }
       } else {
         // Create new project entry for this prefix
-        const { error } = await supabase
+        const { error } = await db
           .from('dev_projects')
           .insert({
             name: data.name,
@@ -167,7 +162,7 @@ export async function POST() {
  * Get current schema info
  */
 export async function GET() {
-  const { data: projects } = await supabase
+  const { data: projects } = await db
     .from('dev_projects')
     .select('id, name, table_prefix, database_schema');
 

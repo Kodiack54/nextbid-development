@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -147,7 +142,7 @@ export async function POST(request: NextRequest) {
     // If session_id provided, fetch messages from DB
     let chatMessages = messages;
     if (session_id && !messages) {
-      const { data: dbMessages, error } = await supabase
+      const { data: dbMessages, error } = await db
         .from('dev_chat_messages')
         .select('role, content, created_at')
         .eq('session_id', session_id)
@@ -173,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     // Update session status to processing
     if (session_id) {
-      await supabase
+      await db
         .from('dev_chat_sessions')
         .update({
           status: 'processing',
@@ -262,7 +257,7 @@ export async function POST(request: NextRequest) {
 
     if (session_id) {
       // Update session with extracted data
-      await supabase
+      await db
         .from('dev_chat_sessions')
         .update({
           status: 'ended',
@@ -276,7 +271,7 @@ export async function POST(request: NextRequest) {
         .eq('id', session_id);
 
       // Save detailed scrubbing results
-      await supabase.from('dev_session_summaries').insert({
+      await db.from('dev_session_summaries').insert({
         session_id,
         summary: extractedData.session_summary?.title || 'Session completed',
         key_points: extractedData.work_completed?.map((w: { description: string }) => w.description) || [],
@@ -291,7 +286,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store full extracted data in a dedicated table for querying
-    const { data: scrubbingRecord, error: insertError } = await supabase
+    const { data: scrubbingRecord, error: insertError } = await db
       .from('dev_session_scrubbing')
       .insert({
         session_id,
@@ -347,7 +342,7 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get('project_id');
     const limit = parseInt(searchParams.get('limit') || '10');
 
-    let query = supabase
+    let query = db
       .from('dev_session_scrubbing')
       .select('*')
       .order('created_at', { ascending: false })

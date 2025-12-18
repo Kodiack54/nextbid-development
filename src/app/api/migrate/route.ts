@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * POST /api/migrate
@@ -16,7 +11,7 @@ export async function POST(request: NextRequest) {
 
     if (migration === 'add_sort_order') {
       // Check if column exists by trying to select it
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('dev_project_paths')
         .select('sort_order')
         .limit(1);

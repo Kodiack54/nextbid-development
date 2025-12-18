@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/susan/notifications
@@ -16,7 +11,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'unread';
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    let query = supabase
+    let query = db
       .from('dev_ai_notifications')
       .select('*')
       .order('created_at', { ascending: false })
@@ -34,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get unread count
-    const { count: unreadCount } = await supabase
+    const { count: unreadCount } = await db
       .from('dev_ai_notifications')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'unread');
@@ -60,14 +55,14 @@ export async function PATCH(request: NextRequest) {
     const { notification_id, mark_all } = body;
 
     if (mark_all) {
-      const { error } = await supabase
+      const { error } = await db
         .from('dev_ai_notifications')
         .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('status', 'unread');
 
       if (error) throw error;
     } else if (notification_id) {
-      const { error } = await supabase
+      const { error } = await db
         .from('dev_ai_notifications')
         .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('id', notification_id);

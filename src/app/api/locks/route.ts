@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/locks
@@ -12,7 +7,7 @@ const supabase = createClient(
  */
 export async function GET(request: NextRequest) {
   try {
-    const { data: locks, error } = await supabase
+    const { data: locks, error } = await db
       .from('dev_active_locks')
       .select('*');
 
@@ -47,7 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existingLock } = await supabase
+    const { data: existingLock } = await db
       .from('dev_project_locks')
       .select('*, dev_users(name)')
       .eq('project_id', project_id)
@@ -65,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: lock, error } = await supabase
+    const { data: lock, error } = await db
       .from('dev_project_locks')
       .insert({
         project_id,
@@ -117,7 +112,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { data: currentLock } = await supabase
+    const { data: currentLock } = await db
       .from('dev_project_locks')
       .select('*')
       .eq('project_id', project_id)
@@ -135,7 +130,7 @@ export async function DELETE(request: NextRequest) {
     const now = new Date();
     const lockDurationMinutes = Math.round((now.getTime() - lockedAt.getTime()) / 60000);
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('dev_project_locks')
       .update({ is_active: false })
       .eq('id', currentLock.id);
@@ -145,7 +140,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to unlock project' }, { status: 500 });
     }
 
-    const { data: history, error: historyError } = await supabase
+    const { data: history, error: historyError } = await db
       .from('dev_project_unlock_history')
       .insert({
         project_id,

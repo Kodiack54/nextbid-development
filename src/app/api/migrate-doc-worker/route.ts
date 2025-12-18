@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 export async function POST() {
   console.log('[Migration] Adding doc_worker columns to dev_chat_sessions...');
@@ -15,7 +10,7 @@ export async function POST() {
     // or the user needs to run this SQL in the dashboard:
 
     // First, check if columns exist by trying to select them
-    const { error: checkError } = await supabase
+    const { error: checkError } = await db
       .from('dev_chat_sessions')
       .select('doc_worker_processed')
       .limit(1);
@@ -32,7 +27,7 @@ ADD COLUMN IF NOT EXISTS doc_worker_processed BOOLEAN DEFAULT FALSE;
 ALTER TABLE dev_chat_sessions
 ADD COLUMN IF NOT EXISTS doc_worker_processed_at TIMESTAMPTZ;
         `.trim(),
-        dashboard_url: 'https://supabase.com/dashboard/project/sgfrqmkimrwmqqnafisw/sql/new'
+        dashboard_url: 'https://db.com/dashboard/project/sgfrqmkimrwmqqnafisw/sql/new'
       });
     }
 

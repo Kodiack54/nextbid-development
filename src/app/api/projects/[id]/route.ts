@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/projects/[id]
@@ -17,7 +12,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('dev_projects')
       .select('*')
       .eq('id', id)
@@ -53,7 +48,7 @@ export async function PATCH(
     delete body.lock;
     delete body.is_locked;
 
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('dev_projects')
       .update(body)
       .eq('id', id)
@@ -83,7 +78,7 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const { error } = await supabase
+    const { error } = await db
       .from('dev_projects')
       .update({ is_active: false })
       .eq('id', id);

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 /**
  * GET /api/dev-server
@@ -16,7 +11,7 @@ const supabase = createClient(
  */
 export async function GET(request: NextRequest) {
   try {
-    const { data: projects, error } = await supabase
+    const { data: projects, error } = await db
       .from('dev_projects')
       .select('id, name, slug, dev_server_status, dev_server_started_at, pm2_process_name, dev_server_error')
       .eq('is_active', true);
@@ -40,7 +35,7 @@ export async function GET(request: NextRequest) {
 
               // Update DB if status changed
               if (actualStatus !== project.dev_server_status) {
-                await supabase
+                await db
                   .from('dev_projects')
                   .update({ dev_server_status: actualStatus })
                   .eq('id', project.id);
@@ -48,7 +43,7 @@ export async function GET(request: NextRequest) {
               }
             } else if (project.dev_server_status === 'running') {
               // Process not found but DB says running - mark as stopped
-              await supabase
+              await db
                 .from('dev_projects')
                 .update({ dev_server_status: 'stopped', pm2_process_name: null })
                 .eq('id', project.id);
@@ -83,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get project
-    const { data: project, error: projectError } = await supabase
+    const { data: project, error: projectError } = await db
       .from('dev_projects')
       .select('*')
       .eq('id', project_id)
@@ -133,7 +128,7 @@ async function startServer(project: any, serverPath: string, port: number, pm2Na
   }
 
   // Update status to starting
-  await supabase
+  await db
     .from('dev_projects')
     .update({
       dev_server_status: 'starting',
@@ -169,7 +164,7 @@ async function startServer(project: any, serverPath: string, port: number, pm2Na
     }
 
     // Update database
-    await supabase
+    await db
       .from('dev_projects')
       .update({
         dev_server_status: 'running',
@@ -193,7 +188,7 @@ async function startServer(project: any, serverPath: string, port: number, pm2Na
     console.error(`[DevServer] Start failed:`, error);
 
     // Update with error
-    await supabase
+    await db
       .from('dev_projects')
       .update({
         dev_server_status: 'error',
@@ -221,7 +216,7 @@ async function stopServer(project: any, pm2Name: string) {
     await execAsync(`pm2 stop "${project.pm2_process_name}"`);
     await execAsync(`pm2 delete "${project.pm2_process_name}"`);
 
-    await supabase
+    await db
       .from('dev_projects')
       .update({
         dev_server_status: 'stopped',

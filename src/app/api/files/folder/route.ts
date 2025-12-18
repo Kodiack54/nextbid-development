@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 const BUCKET_NAME = 'project-files';
 
@@ -26,7 +21,7 @@ export async function POST(request: NextRequest) {
     const fullPath = `${basePath}/${folder_name}/.keep`;
 
     // Create folder by uploading an empty .keep file
-    const { error } = await supabase.storage
+    const { error } = await db.storage
       .from(BUCKET_NAME)
       .upload(fullPath, new Uint8Array(0), {
         contentType: 'text/plain',

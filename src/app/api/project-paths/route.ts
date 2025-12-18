@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/project-paths
@@ -19,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    const { data: paths, error } = await supabase
+    const { data: paths, error } = await db
       .from('dev_project_paths')
       .select('*')
       .eq('project_id', projectId)
@@ -54,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'project_id, path, and label are required' }, { status: 400 });
     }
 
-    const { data: newPath, error } = await supabase
+    const { data: newPath, error } = await db
       .from('dev_project_paths')
       .insert({
         project_id,
@@ -92,7 +87,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('dev_project_paths')
       .delete()
       .eq('id', id);
@@ -126,7 +121,7 @@ export async function PATCH(request: NextRequest) {
     if (label !== undefined) updateData.label = label;
     if (sort_order !== undefined) updateData.sort_order = sort_order;
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from('dev_project_paths')
       .update(updateData)
       .eq('id', id)

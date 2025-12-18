@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 const CHAD_URL = process.env.CHAD_URL || 'http://localhost:5401';
 
@@ -94,7 +89,7 @@ export async function GET() {
     }
 
     // Get counts of processed vs unprocessed sessions
-    const { data: stats } = await supabase
+    const { data: stats } = await db
       .from('dev_ai_sessions')
       .select('last_cataloged_at, status')
       .limit(100);
@@ -104,7 +99,7 @@ export async function GET() {
     const active = stats?.filter(s => s.status === 'active').length || 0;
 
     // Get recent cataloged sessions
-    const { data: recent } = await supabase
+    const { data: recent } = await db
       .from('dev_ai_sessions')
       .select('id, project_path, started_at, last_cataloged_at')
       .not('last_cataloged_at', 'is', null)

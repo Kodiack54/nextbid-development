@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 /**
  * GET /api/projects
@@ -13,7 +8,7 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     // Get all active projects
-    const { data: projects, error: projectsError } = await supabase
+    const { data: projects, error: projectsError } = await db
       .from('dev_projects')
       .select('*')
       .eq('is_active', true)
@@ -25,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get active locks
-    const { data: locks, error: locksError } = await supabase
+    const { data: locks, error: locksError } = await db
       .from('dev_active_locks')
       .select('*');
 
@@ -87,7 +82,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('dev_projects')
       .select('id')
       .eq('slug', slug)
@@ -100,7 +95,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: maxSort } = await supabase
+    const { data: maxSort } = await db
       .from('dev_projects')
       .select('sort_order')
       .order('sort_order', { ascending: false })
@@ -109,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     const sort_order = (maxSort?.sort_order || 0) + 1;
 
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('dev_projects')
       .insert({
         name,
@@ -160,7 +155,7 @@ export async function PATCH(request: NextRequest) {
     delete updates.lock;
     delete updates.is_locked;
 
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('dev_projects')
       .update(updates)
       .eq('id', id)
@@ -192,7 +187,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('dev_projects')
       .update({ is_active: false })
       .eq('id', id);

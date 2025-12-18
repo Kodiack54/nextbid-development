@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { db } from '@/lib/db';
 
 // Use dev_chat_messages table for team chat in dev environment
 const CHANNEL_NAME = 'dev-environment';
@@ -16,7 +11,7 @@ const CHANNEL_NAME = 'dev-environment';
 export async function GET() {
   try {
     // First, ensure the dev-environment channel exists
-    const { data: channel } = await supabase
+    const { data: channel } = await db
       .from('dev_chat_channels')
       .select('id')
       .eq('name', CHANNEL_NAME)
@@ -24,7 +19,7 @@ export async function GET() {
 
     if (!channel) {
       // Create the channel if it doesn't exist
-      const { data: newChannel } = await supabase
+      const { data: newChannel } = await db
         .from('dev_chat_channels')
         .insert({
           name: CHANNEL_NAME,
@@ -43,7 +38,7 @@ export async function GET() {
     const channelId = channel?.id;
 
     // Get recent messages
-    const { data: messages, error } = await supabase
+    const { data: messages, error } = await db
       .from('dev_chat_messages')
       .select('id, user_name, content, created_at')
       .eq('channel_id', channelId)
@@ -79,14 +74,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get or create channel
-    let { data: channel } = await supabase
+    let { data: channel } = await db
       .from('dev_chat_channels')
       .select('id')
       .eq('name', CHANNEL_NAME)
       .single();
 
     if (!channel) {
-      const { data: newChannel } = await supabase
+      const { data: newChannel } = await db
         .from('dev_chat_channels')
         .insert({
           name: CHANNEL_NAME,
@@ -105,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert message
-    const { data: message, error } = await supabase
+    const { data: message, error } = await db
       .from('dev_chat_messages')
       .insert({
         channel_id: channel.id,

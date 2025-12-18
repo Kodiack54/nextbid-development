@@ -1,16 +1,11 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 const PROJECTS_BASE_PATH = '/var/www/NextBid_Dev';
 const ALLOWED_COMMANDS = ['npm', 'npx', 'git', 'ls', 'cat', 'head', 'tail', 'grep', 'find', 'wc', 'pwd'];
@@ -77,7 +72,7 @@ async function executeTool(toolName: string, toolInput: any, projectPath: string
         } catch { return 'No matches'; }
       }
       case 'query_database': {
-        let query = supabase.from(toolInput.table).select(toolInput.select);
+        let query = db.from(toolInput.table).select(toolInput.select);
         if (toolInput.filters) {
           for (const [k, v] of Object.entries(toolInput.filters)) query = query.eq(k, v);
         }
@@ -85,11 +80,11 @@ async function executeTool(toolName: string, toolInput: any, projectPath: string
         return error ? 'Error: ' + error.message : JSON.stringify(data, null, 2);
       }
       case 'insert_database': {
-        const { data, error } = await supabase.from(toolInput.table).insert(toolInput.data).select();
+        const { data, error } = await db.from(toolInput.table).insert(toolInput.data).select();
         return error ? 'Error: ' + error.message : 'Inserted: ' + JSON.stringify(data);
       }
       case 'update_database': {
-        let query = supabase.from(toolInput.table).update(toolInput.data);
+        let query = db.from(toolInput.table).update(toolInput.data);
         for (const [k, v] of Object.entries(toolInput.filters as Record<string, any>)) query = query.eq(k, v);
         const { data, error } = await query.select();
         return error ? 'Error: ' + error.message : 'Updated: ' + JSON.stringify(data);
@@ -282,7 +277,7 @@ Let's build something great.`;
     // Track which AI team member was used (from assistant_name param or derive from model)
     const assistantName = body.assistant_name || (model.includes('haiku') ? 'chad' : 'claude');
 
-    await supabase.from('dev_ai_usage').insert({
+    await db.from('dev_ai_usage').insert({
       user_id, project_id, model, input_tokens: totalIn, output_tokens: totalOut, cost_usd: cost,
       request_type: toolLog.length ? 'chat_with_tools' : 'chat',
       prompt_preview: typeof messages[messages.length - 1]?.content === 'string' ? messages[messages.length - 1].content.slice(0, 255) : 'Tool session',
