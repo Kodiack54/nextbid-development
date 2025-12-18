@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
     console.log(`📝 Updating ${doc_type || 'all'} docs for project:`, project_id);
 
     // Get project info
-    const { data: project } = await db
+    const { data: projectData } = await db
       .from('dev_projects')
       .select('*')
       .eq('id', project_id)
       .single();
+    const project = projectData as Record<string, unknown> | null;
 
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
@@ -61,11 +62,12 @@ export async function POST(request: NextRequest) {
     const aggregatedData = aggregateSessionData(scrubbingResults);
 
     // Get existing project knowledge
-    const { data: existingKnowledge } = await db
+    const { data: existingKnowledgeData } = await db
       .from('dev_project_knowledge')
       .select('*')
       .eq('project_id', project_id)
       .single();
+    const existingKnowledge = existingKnowledgeData as Record<string, unknown> | null;
 
     // Build prompt based on doc type
     const prompt = buildDocUpdatePrompt(
