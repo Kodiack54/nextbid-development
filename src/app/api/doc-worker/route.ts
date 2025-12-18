@@ -89,14 +89,15 @@ export async function GET() {
     }
 
     // Get counts of processed vs unprocessed sessions
-    const { data: stats } = await db
+    const { data: statsData } = await db
       .from('dev_ai_sessions')
       .select('last_cataloged_at, status')
       .limit(100);
+    const stats = (statsData || []) as Array<Record<string, unknown>>;
 
-    const cataloged = stats?.filter(s => s.last_cataloged_at !== null).length || 0;
-    const pending = stats?.filter(s => s.last_cataloged_at === null && s.status === 'completed').length || 0;
-    const active = stats?.filter(s => s.status === 'active').length || 0;
+    const cataloged = stats.filter(s => s.last_cataloged_at !== null).length || 0;
+    const pending = stats.filter(s => s.last_cataloged_at === null && s.status === 'completed').length || 0;
+    const active = stats.filter(s => s.status === 'active').length || 0;
 
     // Get recent cataloged sessions
     const { data: recent } = await db
