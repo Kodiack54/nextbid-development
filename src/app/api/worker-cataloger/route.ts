@@ -20,21 +20,23 @@ export async function POST(request: NextRequest) {
 
   try {
     // Get worker state (last processed times per project)
-    const { data: workerState } = await db
+    const { data: workerStateData } = await db
       .from('dev_worker_state')
       .select('*')
       .eq('worker_key', WORKER_STATE_KEY)
       .single();
+    const workerState = workerStateData as Record<string, unknown> | null;
 
-    const lastProcessed: Record<string, string> = workerState?.state || {};
+    const lastProcessed: Record<string, string> = (workerState?.state as Record<string, string>) || {};
 
     // Get all active sessions with new messages
-    const { data: activeSessions } = await db
+    const { data: activeSessionsData } = await db
       .from('dev_chat_sessions')
       .select('id, project_id, user_id')
       .eq('status', 'active');
+    const activeSessions = (activeSessionsData || []) as Array<Record<string, unknown>>;
 
-    if (!activeSessions?.length) {
+    if (!activeSessions.length) {
       return NextResponse.json({
         success: true,
         message: 'No active sessions to process',
