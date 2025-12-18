@@ -8,11 +8,12 @@ import { db } from '@/lib/db';
 export async function GET(request: NextRequest) {
   try {
     // Get all active projects
-    const { data: projects, error: projectsError } = await db
+    const { data: projectsData, error: projectsError } = await db
       .from('dev_projects')
       .select('*')
       .eq('is_active', true)
       .order('sort_order', { ascending: true });
+    const projects = (projectsData || []) as Array<Record<string, unknown>>;
 
     if (projectsError) {
       console.error('Error fetching projects:', projectsError);
@@ -20,27 +21,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Get active locks
-    const { data: locks, error: locksError } = await db
+    const { data: locksData, error: locksError } = await db
       .from('dev_active_locks')
       .select('*');
+    const locks = (locksData || []) as Array<Record<string, unknown>>;
 
     if (locksError) {
       console.error('Error fetching locks:', locksError);
     }
 
     // Create a map of project_id -> lock info
-    const lockMap = new Map();
-    if (locks) {
-      locks.forEach(lock => {
-        lockMap.set(lock.project_id, lock);
-      });
-    }
+    const lockMap = new Map<string, Record<string, unknown>>();
+    locks.forEach(lock => {
+      lockMap.set(String(lock.project_id), lock);
+    });
 
     // Merge lock info into projects
-    const projectsWithLocks = projects?.map(project => ({
+    const projectsWithLocks = projects.map(project => ({
       ...project,
-      lock: lockMap.get(project.id) || null,
-      is_locked: lockMap.has(project.id),
+      lock: lockMap.get(String(project.id)) || null,
+      is_locked: lockMap.has(String(project.id)),
     }));
 
     return NextResponse.json({
@@ -95,14 +95,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: maxSort } = await db
+    const { data: maxSortData } = await db
       .from('dev_projects')
       .select('sort_order')
       .order('sort_order', { ascending: false })
       .limit(1)
       .single();
+    const maxSort = maxSortData as Record<string, unknown> | null;
 
-    const sort_order = (maxSort?.sort_order || 0) + 1;
+    const sort_order = (Number(maxSort?.sort_order) || 0) + 1;
 
     const { data: project, error } = await db
       .from('dev_projects')
