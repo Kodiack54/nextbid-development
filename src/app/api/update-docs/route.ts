@@ -318,11 +318,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get project knowledge
-    const { data: knowledge } = await db
+    const { data: knowledgeData } = await db
       .from('dev_project_knowledge')
       .select('*')
       .eq('project_id', projectId)
       .single();
+    const knowledge = knowledgeData as Record<string, unknown> | null;
 
     if (!knowledge) {
       return NextResponse.json({
@@ -333,7 +334,7 @@ export async function GET(request: NextRequest) {
 
     // Return specific doc or all
     if (docType) {
-      const docKey = `generated_${docType}` as keyof typeof knowledge;
+      const docKey = `generated_${docType}`;
       return NextResponse.json({
         success: true,
         doc_type: docType,
