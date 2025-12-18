@@ -7,20 +7,20 @@ import { db } from '@/lib/db';
  */
 export async function GET() {
   try {
-    // Get counts from all tables
-    // Helper to safely get count
+    // Get counts from all tables using raw SQL
     const getCount = async (table: string, filter?: { column: string; op: 'is' | 'not'; value: null }) => {
       try {
-        let query = db.from(table).select('id', { count: 'exact', head: true });
+        let whereClause = '';
         if (filter) {
           if (filter.op === 'is') {
-            query = query.is(filter.column, filter.value);
+            whereClause = ` WHERE ${filter.column} IS NULL`;
           } else {
-            query = query.not(filter.column, 'is', filter.value);
+            whereClause = ` WHERE ${filter.column} IS NOT NULL`;
           }
         }
-        const result = await query;
-        return result.count || 0;
+        const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM ${table}${whereClause}`);
+        const rows = result.data as Array<{ count: string }> | null;
+        return rows && rows[0] ? parseInt(rows[0].count, 10) : 0;
       } catch {
         return 0;
       }
