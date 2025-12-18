@@ -60,32 +60,36 @@ export async function POST(request: NextRequest) {
       const lastTime = lastProcessed[projectId] || '1970-01-01T00:00:00Z';
 
       // Get new messages since last processing
-      const { data: newMessages } = await db
+      const sessionId = String(session.id || '');
+      const { data: newMessagesData } = await db
         .from('dev_chat_messages')
         .select('role, content, created_at')
-        .eq('session_id', session.id)
+        .eq('session_id', sessionId)
         .gt('created_at', lastTime)
         .order('created_at', { ascending: true });
+      const newMessages = (newMessagesData || []) as Array<{ role: string; content: string; created_at: string }>;
 
-      if (!newMessages?.length) continue;
+      if (!newMessages.length) continue;
 
-      console.log(`Processing ${newMessages.length} new messages for project ${session.project_id}`);
+      console.log(`Processing ${newMessages.length} new messages for project ${projectId}`);
 
       // Get project info
-      const { data: project } = await db
+      const { data: projectData } = await db
         .from('dev_projects')
         .select('*')
-        .eq('id', session.project_id)
+        .eq('id', projectId)
         .single();
+      const project = projectData as Record<string, unknown> | null;
 
       if (!project) continue;
 
       // Get existing project knowledge
-      const { data: existingKnowledge } = await db
+      const { data: existingKnowledgeData } = await db
         .from('dev_project_knowledge')
         .select('*')
-        .eq('project_id', session.project_id)
+        .eq('project_id', projectId)
         .single();
+      const existingKnowledge = existingKnowledgeData as Record<string, unknown> | null;
 
       // Incremental scrub - just the new messages
       const scrubbedData = await scrubMessages(newMessages, project, existingKnowledge);
@@ -95,7 +99,8 @@ export async function POST(request: NextRequest) {
         const updatedKnowledge = mergeKnowledge(existingKnowledge, scrubbedData);
 
         // Update project knowledge
-        await upsertProjectKnowledge(session.project_id, updatedKnowledge, session.id);
+        const userId = String(session.user_id || '');
+        await upsertProjectKnowledge(projectId, updatedKnowledge, sessionId);
 
         // Update project docs (README, TODO, CODEBASE)
         const docsUpdated = await updateProjectDocs(project, updatedKnowledge);
@@ -104,7 +109,7 @@ export async function POST(request: NextRequest) {
         const ticketsCreated = await createTicketsFromFindings(
           project,
           scrubbedData,
-          session.user_id
+          userId
         );
 
         // Check for inconsistencies and create alerts
@@ -115,7 +120,7 @@ export async function POST(request: NextRequest) {
         );
 
         results.push({
-          project_id: session.project_id,
+          project_id: projectId,
           messages_processed: newMessages.length,
           docs_updated: docsUpdated,
           tickets_created: ticketsCreated,
