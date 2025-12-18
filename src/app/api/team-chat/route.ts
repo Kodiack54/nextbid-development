@@ -11,15 +11,16 @@ const CHANNEL_NAME = 'dev-environment';
 export async function GET() {
   try {
     // First, ensure the dev-environment channel exists
-    const { data: channel } = await db
+    const { data: channelData } = await db
       .from('dev_chat_channels')
       .select('id')
       .eq('name', CHANNEL_NAME)
       .single();
+    let channel = channelData as Record<string, unknown> | null;
 
     if (!channel) {
       // Create the channel if it doesn't exist
-      const { data: newChannel } = await db
+      const { data: newChannelData } = await db
         .from('dev_chat_channels')
         .insert({
           name: CHANNEL_NAME,
@@ -29,13 +30,14 @@ export async function GET() {
         })
         .select('id')
         .single();
+      channel = newChannelData as Record<string, unknown> | null;
 
-      if (!newChannel) {
+      if (!channel) {
         return NextResponse.json({ success: true, messages: [] });
       }
     }
 
-    const channelId = channel?.id;
+    const channelId = channel.id as string;
 
     // Get recent messages
     const { data: messages, error } = await db
@@ -74,14 +76,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Get or create channel
-    let { data: channel } = await db
+    const { data: channelData } = await db
       .from('dev_chat_channels')
       .select('id')
       .eq('name', CHANNEL_NAME)
       .single();
+    let channel = channelData as Record<string, unknown> | null;
 
     if (!channel) {
-      const { data: newChannel } = await db
+      const { data: newChannelData } = await db
         .from('dev_chat_channels')
         .insert({
           name: CHANNEL_NAME,
@@ -92,7 +95,7 @@ export async function POST(request: NextRequest) {
         .select('id')
         .single();
 
-      channel = newChannel;
+      channel = newChannelData as Record<string, unknown> | null;
     }
 
     if (!channel) {
@@ -103,7 +106,7 @@ export async function POST(request: NextRequest) {
     const { data: message, error } = await db
       .from('dev_chat_messages')
       .insert({
-        channel_id: channel.id,
+        channel_id: channel.id as string,
         user_id: user_id,
         user_name: user_name,
         content: content.trim()
