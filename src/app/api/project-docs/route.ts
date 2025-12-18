@@ -56,12 +56,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if doc exists first
-    const { data: existing } = await db
+    const { data: existingData } = await db
       .from('dev_project_docs')
       .select('id')
       .eq('project_id', project_id)
       .eq('doc_type', doc_type)
       .single();
+    const existing = existingData as Record<string, unknown> | null;
 
     let doc;
     let error;
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
           ai_generated: generated_by === 'cataloger',
         })
-        .eq('id', existing.id)
+        .eq('id', existing.id as string)
         .select()
         .single();
       doc = result.data;
