@@ -452,7 +452,7 @@ async function updateProjectDocs(
  */
 async function saveProjectDoc(projectId: string, docType: string, title: string, content: string) {
   // Get current version
-  const { data: current } = await db
+  const { data: currentData } = await db
     .from('dev_project_docs')
     .select('id, version')
     .eq('project_id', projectId)
@@ -460,8 +460,9 @@ async function saveProjectDoc(projectId: string, docType: string, title: string,
     .order('version', { ascending: false })
     .limit(1)
     .single();
+  const current = currentData as Record<string, unknown> | null;
 
-  const newVersion = (current?.version || 0) + 1;
+  const newVersion = ((current?.version as number) || 0) + 1;
 
   await db.from('dev_project_docs').insert({
     project_id: projectId,
@@ -469,7 +470,7 @@ async function saveProjectDoc(projectId: string, docType: string, title: string,
     title,
     content,
     version: newVersion,
-    previous_version_id: current?.id || null,
+    previous_version_id: (current?.id as string) || null,
     ai_generated: true
   });
 }
