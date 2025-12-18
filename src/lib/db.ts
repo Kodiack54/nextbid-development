@@ -119,6 +119,15 @@ class QueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
+  not(column: string, operator: string, value: unknown): this {
+    if (operator === 'is' && value === null) {
+      this.filters.push({ column, operator: 'IS NOT', value: 'NULL' });
+    } else {
+      this.filters.push({ column, operator: `NOT ${operator.toUpperCase()}`, value });
+    }
+    return this;
+  }
+
   in(column: string, values: unknown[]): this {
     this.filters.push({ column, operator: 'IN', value: values });
     return this;
