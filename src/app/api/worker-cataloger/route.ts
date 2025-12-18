@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
 
     // Process each active session
     for (const session of activeSessions) {
-      if (!session.project_id) continue;
+      const projectId = String(session.project_id || '');
+      if (!projectId) continue;
 
-      const lastTime = lastProcessed[session.project_id] || '1970-01-01T00:00:00Z';
+      const lastTime = lastProcessed[projectId] || '1970-01-01T00:00:00Z';
 
       // Get new messages since last processing
       const { data: newMessages } = await db
