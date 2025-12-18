@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('project_id', projectId);
     }
 
-    const { data: usage, error } = await query;
+    const { data, error } = await query;
+    const usage = data as Array<Record<string, unknown>> | null;
 
     if (error) {
       console.error('Error fetching AI usage:', error);
@@ -99,56 +100,63 @@ export async function GET(request: NextRequest) {
     });
 
     usage?.forEach((row) => {
-      totals.input_tokens += row.input_tokens || 0;
-      totals.output_tokens += row.output_tokens || 0;
-      totals.total_tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
-      totals.cost_usd += parseFloat(row.cost_usd) || 0;
+      const inputTokens = Number(row.input_tokens) || 0;
+      const outputTokens = Number(row.output_tokens) || 0;
+      const costUsd = parseFloat(String(row.cost_usd)) || 0;
+
+      totals.input_tokens += inputTokens;
+      totals.output_tokens += outputTokens;
+      totals.total_tokens += inputTokens + outputTokens;
+      totals.cost_usd += costUsd;
 
       // Group by user (use ID as name since we don't join)
-      const userId = row.user_id || 'unknown';
-      if (!byUser[userId]) {
-        byUser[userId] = { name: userId.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
+      const rowUserId = String(row.user_id || 'unknown');
+      if (!byUser[rowUserId]) {
+        byUser[rowUserId] = { name: rowUserId.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
       }
-      byUser[userId].requests++;
-      byUser[userId].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
-      byUser[userId].cost += parseFloat(row.cost_usd) || 0;
+      byUser[rowUserId].requests++;
+      byUser[rowUserId].tokens += inputTokens + outputTokens;
+      byUser[rowUserId].cost += costUsd;
 
       // Group by project
-      if (row.project_id) {
-        if (!byProject[row.project_id]) {
-          byProject[row.project_id] = { name: row.project_id.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
+      const projectId = String(row.project_id || '');
+      if (projectId) {
+        if (!byProject[projectId]) {
+          byProject[projectId] = { name: projectId.slice(0, 8), requests: 0, tokens: 0, cost: 0 };
         }
-        byProject[row.project_id].requests++;
-        byProject[row.project_id].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
-        byProject[row.project_id].cost += parseFloat(row.cost_usd) || 0;
+        byProject[projectId].requests++;
+        byProject[projectId].tokens += inputTokens + outputTokens;
+        byProject[projectId].cost += costUsd;
       }
 
       // Group by request type
-      const requestType = row.request_type || 'chat';
+      const requestType = String(row.request_type || 'chat');
       if (!byType[requestType]) {
         byType[requestType] = { requests: 0, tokens: 0, cost: 0 };
       }
       byType[requestType].requests++;
-      byType[requestType].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
-      byType[requestType].cost += parseFloat(row.cost_usd) || 0;
+      byType[requestType].tokens += inputTokens + outputTokens;
+      byType[requestType].cost += costUsd;
 
       // Group by AI team member (assistant)
-      const assistantKey = row.assistant_name || (row.model?.includes('haiku') ? 'chad' : 'claude');
+      const model = String(row.model || '');
+      const assistantKey = String(row.assistant_name || (model.includes('haiku') ? 'chad' : 'claude'));
       const member = teamMembers[assistantKey] || { name: assistantKey, role: 'Unknown', emoji: '🤖' };
       if (!byAssistant[assistantKey]) {
         byAssistant[assistantKey] = { name: member.name, role: member.role, requests: 0, tokens: 0, cost: 0 };
       }
       byAssistant[assistantKey].requests++;
-      byAssistant[assistantKey].tokens += (row.input_tokens || 0) + (row.output_tokens || 0);
-      byAssistant[assistantKey].cost += parseFloat(row.cost_usd) || 0;
+      byAssistant[assistantKey].tokens += inputTokens + outputTokens;
+      byAssistant[assistantKey].cost += costUsd;
     });
 
-    const { data: budgets } = await db
+    const { data: budgetsData } = await db
       .from('dev_ai_budgets')
       .select('*')
       .eq('is_active', true);
+    const budgets = budgetsData as Array<Record<string, unknown>> | null;
 
-    const teamBudget = budgets?.find((b) => !b.user_id)?.monthly_limit_usd || 200;
+    const teamBudget = Number(budgets?.find((b) => !b.user_id)?.monthly_limit_usd) || 200;
     const budgetUsedPercent = (totals.cost_usd / teamBudget) * 100;
 
     return NextResponse.json({
