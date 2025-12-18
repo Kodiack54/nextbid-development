@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Update last processed time for this project
-        lastProcessed[session.project_id] = newMessages[newMessages.length - 1].created_at;
+        lastProcessed[projectId] = newMessages[newMessages.length - 1].created_at;
       }
     }
 
