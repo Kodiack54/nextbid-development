@@ -42,18 +42,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existingLock } = await db
+    const { data: existingLockData } = await db
       .from('dev_project_locks')
-      .select('*, dev_users(name)')
+      .select('*')
       .eq('project_id', project_id)
       .eq('is_active', true)
       .single();
+    const existingLock = existingLockData as Record<string, unknown> | null;
 
     if (existingLock) {
+      // Get user name if lock exists
+      let lockedByName = 'Unknown';
+      if (existingLock.locked_by) {
+        const { data: userData } = await db
+          .from('dev_users')
+          .select('name')
+          .eq('id', existingLock.locked_by)
+          .single();
+        const user = userData as Record<string, unknown> | null;
+        lockedByName = String(user?.name || 'Unknown');
+      }
+
       return NextResponse.json(
         {
           error: 'Project is already locked',
-          locked_by: existingLock.dev_users?.name || 'Unknown',
+          locked_by: lockedByName,
           locked_at: existingLock.locked_at,
         },
         { status: 409 }
@@ -112,12 +125,13 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { data: currentLock } = await db
+    const { data: currentLockData } = await db
       .from('dev_project_locks')
       .select('*')
       .eq('project_id', project_id)
       .eq('is_active', true)
       .single();
+    const currentLock = currentLockData as Record<string, unknown> | null;
 
     if (!currentLock) {
       return NextResponse.json(
@@ -126,7 +140,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const lockedAt = new Date(currentLock.locked_at);
+    const lockedAt = new Date(String(currentLock.locked_at));
     const now = new Date();
     const lockDurationMinutes = Math.round((now.getTime() - lockedAt.getTime()) / 60000);
 
