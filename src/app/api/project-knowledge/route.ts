@@ -15,14 +15,15 @@ export async function GET(request: NextRequest) {
 
     // If project_id provided, look up the project_path
     if (projectId && !projectPath) {
-      const { data: project } = await db
+      const { data: projectData } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', projectId)
         .single();
+      const project = projectData as Record<string, unknown> | null;
 
       if (project?.server_path) {
-        projectPath = project.server_path;
+        projectPath = String(project.server_path);
       }
     }
 
@@ -70,14 +71,15 @@ export async function POST(request: NextRequest) {
     // Resolve project_path from project_id if needed
     let resolvedPath = project_path;
     if (project_id && !resolvedPath) {
-      const { data: project } = await db
+      const { data: projectData } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', project_id)
         .single();
+      const project = projectData as Record<string, unknown> | null;
 
       if (project?.server_path) {
-        resolvedPath = project.server_path;
+        resolvedPath = String(project.server_path);
       }
     }
 
