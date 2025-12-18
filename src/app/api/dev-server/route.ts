@@ -11,10 +11,11 @@ const execAsync = promisify(exec);
  */
 export async function GET(request: NextRequest) {
   try {
-    const { data: projects, error } = await db
+    const { data: projectsData, error } = await db
       .from('dev_projects')
       .select('id, name, slug, dev_server_status, dev_server_started_at, pm2_process_name, dev_server_error')
       .eq('is_active', true);
+    const projects = (projectsData || []) as Array<Record<string, unknown>>;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Optionally sync with actual PM2 status
     const syncedProjects = await Promise.all(
-      (projects || []).map(async (project) => {
+      projects.map(async (project) => {
         if (project.pm2_process_name) {
           try {
             const { stdout } = await execAsync(`pm2 jlist`);
@@ -78,19 +79,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Get project
-    const { data: project, error: projectError } = await db
+    const { data: projectData, error: projectError } = await db
       .from('dev_projects')
       .select('*')
       .eq('id', project_id)
       .single();
+    const project = projectData as Record<string, unknown> | null;
 
     if (projectError || !project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     // Determine path and port based on environment
-    const serverPath = environment === 'test' ? (project.server_path_test || project.server_path) : project.server_path;
-    const port = environment === 'dev' ? project.port_dev : project.port_test;
+    const serverPath = environment === 'test' ? (String(project.server_path_test || project.server_path)) : String(project.server_path);
+    const port = environment === 'dev' ? Number(project.port_dev) : Number(project.port_test);
     const pm2Name = `dev-${project.slug}-${port}`;
 
     switch (action) {
