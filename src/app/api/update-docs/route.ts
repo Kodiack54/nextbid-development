@@ -47,9 +47,10 @@ export async function POST(request: NextRequest) {
         .in('id', session_scrubbing_ids);
     }
 
-    const { data: scrubbingResults } = await query;
+    const { data: scrubbingResultsData } = await query;
+    const scrubbingResults = (scrubbingResultsData || []) as Array<{ extracted_data: Record<string, unknown>; created_at: string }>;
 
-    if (!scrubbingResults?.length) {
+    if (!scrubbingResults.length) {
       return NextResponse.json({
         error: 'No session scrubbing data found for this project',
         suggestion: 'Run /api/scrub-session first to analyze your chat sessions'
