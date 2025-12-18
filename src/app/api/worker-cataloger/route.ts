@@ -610,13 +610,14 @@ async function createTicketsFromFindings(
   const projectSlug = project.slug || project.name;
 
   // Get user info for reporter
-  const { data: user } = await db
+  const { data: userData } = await db
     .from('dev_users')
     .select('name')
     .eq('id', userId)
     .single();
+  const user = userData as Record<string, unknown> | null;
 
-  const reporterName = user?.name || 'Cataloger Worker';
+  const reporterName = (user?.name as string) || 'Cataloger Worker';
 
   // Create tickets for critical/high priority todos
   const todos = (scrubbedData.new_todos as Array<{
