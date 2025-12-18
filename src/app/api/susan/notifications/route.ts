@@ -28,16 +28,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
     }
 
-    // Get unread count
-    const { count: unreadCount } = await db
-      .from('dev_ai_notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'unread');
+    // Get unread count using raw SQL
+    const countResult = await db.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM dev_ai_notifications WHERE status = $1`,
+      ['unread']
+    );
+    const countRows = countResult.data as Array<{ count: string }> | null;
+    const unreadCount = countRows && countRows[0] ? parseInt(countRows[0].count, 10) : 0;
 
     return NextResponse.json({
       success: true,
       notifications: notifications || [],
-      unreadCount: unreadCount || 0
+      unreadCount
     });
   } catch (error) {
     console.error('Error in notifications GET:', error);
