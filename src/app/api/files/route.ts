@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { promises as fs } from 'fs';
+import path from 'path';
 
-const BUCKET_NAME = 'project-files';
+// Base directory for project files (on server filesystem)
+const STORAGE_BASE = process.env.STORAGE_PATH || '/var/www/NextBid_Dev/storage';
+const PUBLIC_URL_BASE = process.env.STORAGE_URL || '/api/files/serve';
+
+interface FileInfo {
+  name: string;
+  path: string;
+  url: string;
+  isFolder: boolean;
+  size?: number;
+  modified?: string;
+}
 
 /**
  * GET /api/files
@@ -17,36 +29,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    const path = folder ? `${projectId}/${folder}` : projectId;
+    const relativePath = folder ? `${projectId}/${folder}` : projectId;
+    const fullPath = path.join(STORAGE_BASE, relativePath);
 
-    const { data: files, error } = await db.storage
-      .from(BUCKET_NAME)
-      .list(path, {
-        sortBy: { column: 'name', order: 'asc' },
+    // Check if directory exists
+    try {
+      await fs.access(fullPath);
+    } catch {
+      // Directory doesn't exist, create it and return empty list
+      await fs.mkdir(fullPath, { recursive: true });
+      return NextResponse.json({
+        success: true,
+        files: [],
+        currentPath: relativePath,
       });
-
-    if (error) {
-      console.error('Error listing files:', error);
-      return NextResponse.json({ error: 'Failed to list files' }, { status: 500 });
     }
 
-    // Get public URLs for each file
-    const filesWithUrls = files?.map(file => {
-      const filePath = folder ? `${projectId}/${folder}/${file.name}` : `${projectId}/${file.name}`;
-      const { data: urlData } = db.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+    const entries = await fs.readdir(fullPath, { withFileTypes: true });
+    const files: FileInfo[] = [];
 
-      return {
-        ...file,
-        path: filePath,
-        url: urlData.publicUrl,
-        isFolder: file.id === null, // Supabase returns null id for folders
-      };
-    }) || [];
+    for (const entry of entries) {
+      const entryPath = path.join(fullPath, entry.name);
+      const entryRelativePath = folder ? `${projectId}/${folder}/${entry.name}` : `${projectId}/${entry.name}`;
+
+      let size: number | undefined;
+      let modified: string | undefined;
+
+      if (!entry.isDirectory()) {
+        const stats = await fs.stat(entryPath);
+        size = stats.size;
+        modified = stats.mtime.toISOString();
+      }
+
+      files.push({
+        name: entry.name,
+        path: entryRelativePath,
+        url: `${PUBLIC_URL_BASE}?path=${encodeURIComponent(entryRelativePath)}`,
+        isFolder: entry.isDirectory(),
+        size,
+        modified,
+      });
+    }
+
+    // Sort: folders first, then alphabetically
+    files.sort((a, b) => {
+      if (a.isFolder && !b.isFolder) return -1;
+      if (!a.isFolder && b.isFolder) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
     return NextResponse.json({
       success: true,
-      files: filesWithUrls,
-      currentPath: path,
+      files,
+      currentPath: relativePath,
     });
   } catch (error) {
     console.error('Error in files GET:', error);
@@ -70,33 +105,25 @@ export async function POST(request: NextRequest) {
     }
 
     const fileName = file.name;
-    const filePath = folder ? `${projectId}/${folder}/${fileName}` : `${projectId}/${fileName}`;
+    const relativePath = folder ? `${projectId}/${folder}` : projectId;
+    const fullDir = path.join(STORAGE_BASE, relativePath);
+    const fullPath = path.join(fullDir, fileName);
+    const fileRelativePath = `${relativePath}/${fileName}`;
 
-    // Convert file to buffer
+    // Ensure directory exists
+    await fs.mkdir(fullDir, { recursive: true });
+
+    // Convert file to buffer and write
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    const { data, error } = await db.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: true, // Overwrite if exists
-      });
-
-    if (error) {
-      console.error('Error uploading file:', error);
-      return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 });
-    }
-
-    // Get public URL
-    const { data: urlData } = db.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+    await fs.writeFile(fullPath, buffer);
 
     return NextResponse.json({
       success: true,
       file: {
         name: fileName,
-        path: filePath,
-        url: urlData.publicUrl,
+        path: fileRelativePath,
+        url: `${PUBLIC_URL_BASE}?path=${encodeURIComponent(fileRelativePath)}`,
         size: file.size,
         type: file.type,
       },
@@ -114,23 +141,28 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const path = searchParams.get('path');
+    const filePath = searchParams.get('path');
 
-    if (!path) {
+    if (!filePath) {
       return NextResponse.json({ error: 'path is required' }, { status: 400 });
     }
 
-    const { error } = await db.storage
-      .from(BUCKET_NAME)
-      .remove([path]);
+    const fullPath = path.join(STORAGE_BASE, filePath);
 
-    if (error) {
-      console.error('Error deleting file:', error);
-      return NextResponse.json({ error: 'Failed to delete file' }, { status: 500 });
+    // Check what type of entry it is
+    const stats = await fs.stat(fullPath);
+
+    if (stats.isDirectory()) {
+      await fs.rm(fullPath, { recursive: true });
+    } else {
+      await fs.unlink(fullPath);
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    }
     console.error('Error in files DELETE:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

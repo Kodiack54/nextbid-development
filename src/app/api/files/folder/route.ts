@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { promises as fs } from 'fs';
+import path from 'path';
 
-const BUCKET_NAME = 'project-files';
+// Base directory for project files (on server filesystem)
+const STORAGE_BASE = process.env.STORAGE_PATH || '/var/www/NextBid_Dev/storage';
 
 /**
  * POST /api/files/folder
- * Create a new folder (by uploading a .keep file)
+ * Create a new folder
  */
 export async function POST(request: NextRequest) {
   try {
@@ -18,19 +20,10 @@ export async function POST(request: NextRequest) {
 
     // Build full path
     const basePath = folder_path ? `${project_id}/${folder_path}` : project_id;
-    const fullPath = `${basePath}/${folder_name}/.keep`;
+    const fullPath = path.join(STORAGE_BASE, basePath, folder_name);
 
-    // Create folder by uploading an empty .keep file
-    const { error } = await db.storage
-      .from(BUCKET_NAME)
-      .upload(fullPath, new Uint8Array(0), {
-        contentType: 'text/plain',
-      });
-
-    if (error) {
-      console.error('Error creating folder:', error);
-      return NextResponse.json({ error: 'Failed to create folder' }, { status: 500 });
-    }
+    // Create folder recursively
+    await fs.mkdir(fullPath, { recursive: true });
 
     return NextResponse.json({
       success: true,
