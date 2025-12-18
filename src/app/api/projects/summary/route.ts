@@ -36,24 +36,24 @@ export async function GET(request: NextRequest) {
 
     // If project_id provided, look up the server_path
     if (projectId && !projectPath) {
-      const { data: project } = await db
+      const { data: projectData } = await db
         .from('dev_projects')
         .select('server_path')
         .eq('id', projectId)
         .single();
+      const project = projectData as Record<string, unknown> | null;
 
       if (project?.server_path) {
-        projectPath = project.server_path;
+        projectPath = String(project.server_path);
       }
     }
 
     // Get all projects with their paths for mapping
-    const { data: projects } = await db
+    const { data: projectsData } = await db
       .from('dev_projects')
       .select('id, name, slug, server_path')
       .eq('is_active', true);
-
-    const projectPaths = projects?.map(p => p.server_path).filter(Boolean) || [];
+    const projects = (projectsData || []) as Array<Record<string, unknown>>;
 
     // If specific project requested
     if (projectPath) {
@@ -67,9 +67,9 @@ export async function GET(request: NextRequest) {
     // Get summaries for all projects
     const summaries: Record<string, ProjectSummary> = {};
 
-    for (const project of projects || []) {
+    for (const project of projects) {
       if (project.server_path) {
-        summaries[project.id] = await getProjectSummary(project.server_path);
+        summaries[String(project.id)] = await getProjectSummary(String(project.server_path));
       }
     }
 
@@ -83,89 +83,106 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Helper to count rows
+async function countRows(table: string, filters: Array<{ column: string; value: unknown }>): Promise<number> {
+  try {
+    let whereClause = '';
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+
+    filters.forEach((filter, i) => {
+      conditions.push(`${filter.column} = $${i + 1}`);
+      values.push(filter.value);
+    });
+
+    if (conditions.length > 0) {
+      whereClause = ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM ${table}${whereClause}`, values);
+    const rows = result.data as Array<{ count: string }> | null;
+    return rows && rows[0] ? parseInt(rows[0].count, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function getProjectSummary(projectPath: string): Promise<ProjectSummary> {
-  // Get session counts
+  // Get counts using raw queries
   const [
-    { count: pendingSessions },
-    { count: processedSessions },
-    { count: pendingTodos },
-    { count: completedTodos },
-    { count: knowledgeCount },
-    { count: bugsCount },
-    { count: codeChangesCount },
-    { data: lastSession }
+    pendingSessions,
+    processedSessions,
+    pendingTodos,
+    completedTodos,
+    knowledgeCount,
+    bugsCount,
+    codeChangesCount,
   ] = await Promise.all([
     // Pending sessions
-    db
-      .from('dev_ai_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending_review')
-      .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`),
+    countRows('dev_ai_sessions', [
+      { column: 'status', value: 'pending_review' },
+      { column: 'project_path', value: projectPath },
+    ]),
 
     // Processed sessions
-    db
-      .from('dev_ai_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'processed')
-      .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`),
+    countRows('dev_ai_sessions', [
+      { column: 'status', value: 'processed' },
+      { column: 'project_path', value: projectPath },
+    ]),
 
     // Pending todos
-    db
-      .from('dev_ai_todos')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath)
-      .eq('status', 'pending'),
+    countRows('dev_ai_todos', [
+      { column: 'project_path', value: projectPath },
+      { column: 'status', value: 'pending' },
+    ]),
 
     // Completed todos
-    db
-      .from('dev_ai_todos')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath)
-      .eq('status', 'completed'),
+    countRows('dev_ai_todos', [
+      { column: 'project_path', value: projectPath },
+      { column: 'status', value: 'completed' },
+    ]),
 
     // Knowledge items
-    db
-      .from('dev_ai_knowledge')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath),
+    countRows('dev_ai_knowledge', [
+      { column: 'project_path', value: projectPath },
+    ]),
 
     // Bugs
-    db
-      .from('dev_ai_bugs')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath),
+    countRows('dev_ai_bugs', [
+      { column: 'project_path', value: projectPath },
+    ]),
 
     // Code changes
-    db
-      .from('dev_ai_code_changes')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_path', projectPath),
-
-    // Last activity
-    db
-      .from('dev_ai_sessions')
-      .select('started_at')
-      .or(`project_path.eq.${projectPath},project_path.ilike.%${projectPath.split('/').pop()}%`)
-      .order('started_at', { ascending: false })
-      .limit(1)
+    countRows('dev_ai_code_changes', [
+      { column: 'project_path', value: projectPath },
+    ]),
   ]);
+
+  // Get last activity
+  const { data: lastSessionData } = await db
+    .from('dev_ai_sessions')
+    .select('started_at')
+    .eq('project_path', projectPath)
+    .order('started_at', { ascending: false })
+    .limit(1);
+  const lastSession = (lastSessionData || []) as Array<Record<string, unknown>>;
 
   return {
     project_id: '',
     project_path: projectPath,
     sessions: {
-      pending: pendingSessions || 0,
-      processed: processedSessions || 0,
-      total: (pendingSessions || 0) + (processedSessions || 0)
+      pending: pendingSessions,
+      processed: processedSessions,
+      total: pendingSessions + processedSessions
     },
     todos: {
-      pending: pendingTodos || 0,
-      completed: completedTodos || 0,
-      total: (pendingTodos || 0) + (completedTodos || 0)
+      pending: pendingTodos,
+      completed: completedTodos,
+      total: pendingTodos + completedTodos
     },
-    knowledge: knowledgeCount || 0,
-    bugs: bugsCount || 0,
-    code_changes: codeChangesCount || 0,
-    last_activity: lastSession?.[0]?.started_at || null
+    knowledge: knowledgeCount,
+    bugs: bugsCount,
+    code_changes: codeChangesCount,
+    last_activity: lastSession[0]?.started_at ? String(lastSession[0].started_at) : null
   };
 }
