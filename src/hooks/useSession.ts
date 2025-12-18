@@ -97,7 +97,7 @@ export function useSession(): UseSessionReturn {
       if (data.success) {
         setSession(data.session);
         setMessages([]);
-        console.log('[Session] Created new session:', data.session.id);
+        console.log('[Session] Created new session:', data.session?.id || 'no-db');
       } else {
         setError(data.error || 'Failed to start session');
       }

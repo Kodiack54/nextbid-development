@@ -9,7 +9,6 @@ interface Session {
   started_at: string;
   ended_at?: string;
   summary?: string;
-  dev_projects?: { name: string; slug: string };
   message_count?: number;
   source_type?: string;
   source_name?: string;
@@ -18,21 +17,16 @@ interface Session {
   processed_by_susan?: boolean;
 }
 
-interface ProjectDoc {
+interface Extraction {
   id: string;
-  doc_type: string;
+  session_id: string;
+  extraction_type: string;
   content: string;
-  updated_at: string;
-}
-
-interface ProjectKnowledge {
-  id: string;
   category: string;
-  title: string;
-  summary?: string;
-  session_id?: string;
+  priority: string;
+  status: string;
   created_at: string;
-  importance?: number;
+  project_path?: string;
 }
 
 interface WorkerStatus {
@@ -53,22 +47,22 @@ interface SessionHubPanelProps {
   onTriggerWorker?: () => void;
 }
 
+const CHAD_URL = process.env.NEXT_PUBLIC_CHAD_URL || 'http://161.35.229.220:5401';
+
 export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWorker }: SessionHubPanelProps) {
-  const [activeTab, setActiveTab] = useState<'sessions' | 'docs' | 'knowledge' | 'todos'>('sessions');
+  const [activeTab, setActiveTab] = useState<'sessions' | 'knowledge' | 'todos'>('sessions');
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [docs, setDocs] = useState<ProjectDoc[]>([]);
-  const [knowledge, setKnowledge] = useState<ProjectKnowledge[]>([]);
+  const [knowledge, setKnowledge] = useState<Extraction[]>([]);
+  const [todos, setTodos] = useState<Extraction[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
-  // Fetch sessions from Chad's dumps (dev_ai_sessions)
+  // Fetch sessions from Chad's dumps
   useEffect(() => {
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        // Fetch from Chad's pending dumps endpoint
-        const res = await fetch('/api/chad/sessions');
+        const res = await fetch(`${CHAD_URL}/api/sessions/recent`);
         const data = await res.json();
         if (data.success) {
           setSessions(data.sessions || []);
@@ -81,36 +75,29 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
     };
 
     fetchSessions();
-    // Refresh every 30 seconds to catch new dumps
     const interval = setInterval(fetchSessions, 30000);
     return () => clearInterval(interval);
-  }, [projectId]);
+  }, []);
 
-  // Fetch docs and knowledge when project changes
+  // Fetch extractions (knowledge + todos) from Chad
   useEffect(() => {
-    if (!projectId) return;
-
-    const fetchProjectData = async () => {
+    const fetchExtractions = async () => {
       try {
-        const [docsRes, knowledgeRes] = await Promise.all([
-          fetch(`/api/project-docs?project_id=${projectId}`),
-          fetch(`/api/project-knowledge?project_id=${projectId}`),
-        ]);
-
-        const [docsData, knowledgeData] = await Promise.all([
-          docsRes.json().catch(() => ({ success: false })),
-          knowledgeRes.json().catch(() => ({ success: false })),
-        ]);
-
-        if (docsData.success) setDocs(docsData.docs || []);
-        if (knowledgeData.success) setKnowledge(knowledgeData.knowledge || []);
+        const res = await fetch(`${CHAD_URL}/api/extractions/pending`);
+        const data = await res.json();
+        if (data.success) {
+          setKnowledge(data.data?.knowledge || []);
+          setTodos(data.data?.todos || []);
+        }
       } catch (error) {
-        console.error('Failed to fetch project data:', error);
+        console.error('Failed to fetch extractions:', error);
       }
     };
 
-    fetchProjectData();
-  }, [projectId]);
+    fetchExtractions();
+    const interval = setInterval(fetchExtractions, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -128,9 +115,8 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
 
   const tabs = [
     { id: 'sessions', label: 'Sessions', count: sessions.length },
-    { id: 'docs', label: 'Docs', count: docs.length },
     { id: 'knowledge', label: 'Knowledge', count: knowledge.length },
-    { id: 'todos', label: 'Todos', count: 0 },
+    { id: 'todos', label: 'Todos', count: todos.length },
   ] as const;
 
   return (
@@ -140,7 +126,7 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${workerStatus?.isRunning ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
           <span className="text-gray-400 text-xs">
-            {workerStatus?.isRunning ? 'Cataloging...' : 'Cataloger idle'}
+            Chad → Susan Pipeline
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -173,7 +159,9 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
           >
             {tab.label}
             {tab.count > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-gray-700 rounded text-[10px]">
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${
+                tab.id === 'todos' ? 'bg-yellow-600' : 'bg-gray-700'
+              }`}>
                 {tab.count}
               </span>
             )}
@@ -193,31 +181,17 @@ export function SessionHubPanel({ projectId, userId, workerStatus, onTriggerWork
           />
         )}
 
-        {activeTab === 'docs' && (
-          <DocsList
-            docs={docs}
-            expandedDoc={expandedDoc}
-            onToggleDoc={setExpandedDoc}
-            formatTime={formatTime}
-          />
-        )}
-
         {activeTab === 'knowledge' && (
-          <KnowledgeList
-            knowledge={knowledge}
-            formatTime={formatTime}
-          />
+          <KnowledgeList knowledge={knowledge} formatTime={formatTime} />
         )}
 
         {activeTab === 'todos' && (
-          <TodosList projectId={projectId} />
+          <TodosList todos={todos} formatTime={formatTime} />
         )}
       </div>
     </div>
   );
 }
-
-// Sub-components
 
 function SessionsList({
   sessions,
@@ -244,21 +218,20 @@ function SessionsList({
     return (
       <div className="p-4 text-center text-gray-500">
         <p>No session dumps yet.</p>
-        <p className="text-xs mt-1">Chad will capture dumps every 30 minutes.</p>
+        <p className="text-xs mt-1">Chad captures dumps every 30 minutes.</p>
       </div>
     );
   }
 
-  // Split into pending and processed
-  const pending = sessions.filter(s => s.needs_review);
-  const processed = sessions.filter(s => !s.needs_review);
+  const pending = sessions.filter(s => s.status === 'pending_review');
+  const processed = sessions.filter(s => s.status !== 'pending_review');
 
   return (
-    <div>
-      {/* Pending for Susan */}
+    <div className="divide-y divide-gray-800">
       {pending.length > 0 && (
-        <div className="border-b border-gray-700">
-          <div className="px-3 py-1.5 bg-yellow-900/20 text-yellow-400 text-[10px] font-medium">
+        <div>
+          <div className="px-3 py-1.5 bg-yellow-900/30 text-yellow-400 text-[10px] font-medium flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
             Pending for Susan ({pending.length})
           </div>
           <div className="divide-y divide-gray-800">
@@ -272,13 +245,13 @@ function SessionsList({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                    <span className="text-white text-xs font-medium truncate max-w-[120px]">
-                      {session.source_name || session.title || 'Unknown'}
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                    <span className="text-gray-300 text-xs font-medium truncate max-w-[120px]">
+                      {session.source_name || session.source_type || 'Unknown'}
                     </span>
                     {session.message_count && (
                       <span className="text-gray-500 text-[10px]">
-                        ({session.message_count} msgs)
+                        {session.message_count} msgs
                       </span>
                     )}
                   </div>
@@ -286,30 +259,19 @@ function SessionsList({
                     {formatTime(session.started_at)}
                   </span>
                 </div>
-                {session.source_type && (
-                  <div className="text-gray-500 text-[10px] mt-0.5 pl-3.5">
-                    {session.source_type}
-                  </div>
-                )}
-                {selectedSession?.id === session.id && session.summary && (
-                  <div className="mt-2 p-2 bg-gray-900 rounded text-gray-400 text-[11px] whitespace-pre-wrap">
-                    {session.summary}
-                  </div>
-                )}
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Processed sessions */}
       {processed.length > 0 && (
         <div>
           <div className="px-3 py-1.5 bg-gray-800 text-gray-400 text-[10px] font-medium">
             Processed ({processed.length})
           </div>
           <div className="divide-y divide-gray-800">
-            {processed.map(session => (
+            {processed.slice(0, 10).map(session => (
               <button
                 key={session.id}
                 onClick={() => onSelectSession(selectedSession?.id === session.id ? null : session)}
@@ -321,18 +283,13 @@ function SessionsList({
                   <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                     <span className="text-gray-300 text-xs font-medium truncate max-w-[120px]">
-                      {session.source_name || session.title || 'Unknown'}
+                      {session.source_name || session.source_type || 'Unknown'}
                     </span>
                   </div>
                   <span className="text-gray-500 text-[10px]">
                     {formatTime(session.started_at)}
                   </span>
                 </div>
-                {selectedSession?.id === session.id && session.summary && (
-                  <div className="mt-2 p-2 bg-gray-900 rounded text-gray-400 text-[11px] whitespace-pre-wrap">
-                    {session.summary}
-                  </div>
-                )}
               </button>
             ))}
           </div>
@@ -342,153 +299,92 @@ function SessionsList({
   );
 }
 
-function DocsList({
-  docs,
-  expandedDoc,
-  onToggleDoc,
-  formatTime,
-}: {
-  docs: ProjectDoc[];
-  expandedDoc: string | null;
-  onToggleDoc: (id: string | null) => void;
-  formatTime: (d: string) => string;
-}) {
-  const docTypeIcons: Record<string, string> = {
-    README: '📖',
-    TODO: '✅',
-    CODEBASE: '📁',
-    CHANGELOG: '📝',
-  };
-
-  if (docs.length === 0) {
-    return (
-      <div className="p-4 text-center text-gray-500">
-        <p>No generated docs yet.</p>
-        <p className="text-xs mt-1">The cataloger will generate docs from your sessions.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="divide-y divide-gray-800">
-      {docs.map(doc => (
-        <div key={doc.id} className="px-3 py-2">
-          <button
-            onClick={() => onToggleDoc(expandedDoc === doc.id ? null : doc.id)}
-            className="w-full flex items-center justify-between text-left hover:bg-gray-800 -mx-3 -my-2 px-3 py-2"
-          >
-            <div className="flex items-center gap-2">
-              <span>{docTypeIcons[doc.doc_type] || '📄'}</span>
-              <span className="text-white font-mono text-xs">{doc.doc_type}.md</span>
-            </div>
-            <span className="text-gray-500 text-[10px]">
-              {formatTime(doc.updated_at)}
-            </span>
-          </button>
-
-          {expandedDoc === doc.id && (
-            <div className="mt-2 p-2 bg-gray-900 rounded max-h-64 overflow-auto">
-              <pre className="text-gray-300 text-[11px] whitespace-pre-wrap font-mono">
-                {doc.content}
-              </pre>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function KnowledgeList({
   knowledge,
   formatTime,
 }: {
-  knowledge: ProjectKnowledge[];
+  knowledge: Extraction[];
   formatTime: (d: string) => string;
 }) {
   const categoryColors: Record<string, string> = {
-    api: 'text-blue-400',
-    config: 'text-yellow-400',
-    architecture: 'text-purple-400',
-    feature: 'text-green-400',
-    'bug-fix': 'text-red-400',
-    database: 'text-cyan-400',
-    explanation: 'text-gray-400',
+    decision: 'text-purple-400 bg-purple-900/30',
+    discovery: 'text-blue-400 bg-blue-900/30',
+    config: 'text-yellow-400 bg-yellow-900/30',
+    infrastructure: 'text-cyan-400 bg-cyan-900/30',
+    bug: 'text-red-400 bg-red-900/30',
+    solution: 'text-green-400 bg-green-900/30',
+    general: 'text-gray-400 bg-gray-800',
   };
 
   if (knowledge.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
-        <p>No knowledge items yet.</p>
-        <p className="text-xs mt-1">Susan extracts knowledge from your sessions.</p>
+        <p>No knowledge items pending.</p>
+        <p className="text-xs mt-1">Chad extracts → Susan sorts.</p>
       </div>
     );
   }
 
   return (
     <div className="divide-y divide-gray-800">
+      <div className="px-3 py-1.5 bg-blue-900/20 text-blue-400 text-[10px] font-medium">
+        Pending for Susan to sort ({knowledge.length})
+      </div>
       {knowledge.map(item => (
         <div key={item.id} className="px-3 py-2">
           <div className="flex items-center justify-between mb-1">
-            <span className={`text-xs font-medium ${categoryColors[item.category] || 'text-gray-400'}`}>
-              {item.category?.replace('_', ' ') || 'general'}
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${categoryColors[item.category] || categoryColors.general}`}>
+              {item.category}
             </span>
             <span className="text-gray-500 text-[10px]">
               {formatTime(item.created_at)}
             </span>
           </div>
-          <div className="text-white text-xs font-medium mb-1">
-            {item.title}
+          <div className="text-gray-300 text-xs leading-relaxed">
+            {item.content?.substring(0, 200)}
+            {item.content?.length > 200 && '...'}
           </div>
-          {item.summary && (
-            <div className="text-gray-400 text-[11px]">
-              {item.summary}
-            </div>
-          )}
         </div>
       ))}
     </div>
   );
 }
 
-function TodosList({ projectId }: { projectId: string | null }) {
-  const [todos, setTodos] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (!projectId) return;
-
-    const fetchTodos = async () => {
-      try {
-        const res = await fetch(`/api/project-knowledge?project_id=${projectId}&type=todo`);
-        const data = await res.json();
-        if (data.success) {
-          setTodos(data.knowledge || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch todos:', error);
-      }
-    };
-
-    fetchTodos();
-  }, [projectId]);
-
+function TodosList({
+  todos,
+  formatTime,
+}: {
+  todos: Extraction[];
+  formatTime: (d: string) => string;
+}) {
   if (todos.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
-        <p>No todos tracked yet.</p>
-        <p className="text-xs mt-1">Todos are extracted from your chat sessions.</p>
+        <p>No todos pending.</p>
+        <p className="text-xs mt-1">Chad extracts → Susan sorts.</p>
       </div>
     );
   }
 
   return (
     <div className="divide-y divide-gray-800">
-      {todos.map((todo, i) => (
-        <div key={i} className="px-3 py-2 flex items-start gap-2">
-          <input type="checkbox" className="mt-0.5" />
-          <span className="text-gray-300 text-xs">
-            {typeof todo.content === 'string' ? todo.content : JSON.stringify(todo.content)}
-          </span>
+      <div className="px-3 py-1.5 bg-yellow-900/20 text-yellow-400 text-[10px] font-medium">
+        Pending for Susan to assign ({todos.length})
+      </div>
+      {todos.map(item => (
+        <div key={item.id} className="px-3 py-2 flex items-start gap-2">
+          <span className={`mt-0.5 w-2 h-2 rounded border ${
+            item.priority === 'high' ? 'border-red-400' : 'border-gray-500'
+          }`} />
+          <div className="flex-1">
+            <div className="text-gray-300 text-xs leading-relaxed">
+              {item.content?.substring(0, 150)}
+              {item.content?.length > 150 && '...'}
+            </div>
+            <div className="text-gray-500 text-[10px] mt-1">
+              {formatTime(item.created_at)}
+            </div>
+          </div>
         </div>
       ))}
     </div>

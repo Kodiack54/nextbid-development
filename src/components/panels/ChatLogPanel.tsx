@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { FileText, Save, Move, Minimize2, Maximize2 } from 'lucide-react';
+import { FileText, Save, Move, Minimize2, Maximize2, Bot } from 'lucide-react';
 
-// Unified message format for both Claude and Chad
 export interface ChatLogMessage {
   id: string;
-  source: 'claude' | 'chad';
+  source: 'claude' | 'chad' | 'external';
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
@@ -25,12 +24,9 @@ interface ChatLogPanelProps {
   onSummarize: () => void;
   onEndSession: () => void;
   isSummarizing: boolean;
-  // For floating mode
   floating?: boolean;
   onToggleFloating?: () => void;
-  // Chat handlers for sending messages
   onSendToClaudeTerminal?: (message: string) => void;
-  onSendToChad?: (message: string) => void;
 }
 
 export function ChatLogPanel({
@@ -44,24 +40,19 @@ export function ChatLogPanel({
   floating = false,
   onToggleFloating,
   onSendToClaudeTerminal,
-  onSendToChad,
 }: ChatLogPanelProps) {
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
-  const [claudeInput, setClaudeInput] = useState('');
-  const [chadInput, setChadInput] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const claudeEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
 
-  // Dragging handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!floating) return;
     setIsDragging(true);
@@ -73,61 +64,33 @@ export function ChatLogPanel({
 
   useEffect(() => {
     if (!isDragging) return;
-
     const handleMouseMove = (e: MouseEvent) => {
       setPosition({
         x: e.clientX - dragOffset.x,
         y: e.clientY - dragOffset.y,
       });
     };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
+    const handleMouseUp = () => setIsDragging(false);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, dragOffset]);
 
-  // Source colors and labels
-  const getSourceStyle = (source: 'claude' | 'chad', role: 'user' | 'assistant') => {
-    if (role === 'user') {
-      return {
-        bg: source === 'claude' ? 'bg-orange-900/30' : 'bg-blue-900/30',
-        border: source === 'claude' ? 'border-orange-500' : 'border-blue-500',
-        label: source === 'claude' ? 'text-orange-400' : 'text-blue-400',
-        name: 'You',
-      };
-    }
-    return {
-      bg: source === 'claude' ? 'bg-orange-900/20' : 'bg-blue-900/20',
-      border: source === 'claude' ? 'border-orange-400' : 'border-blue-400',
-      label: source === 'claude' ? 'text-orange-300' : 'text-blue-300',
-      name: source === 'claude' ? '👨‍💻 Claude' : '🧑‍💻 Chad',
-    };
-  };
-
-  // Separate messages by source
-  const claudeMessages = messages.filter(m => m.source === 'claude');
-  const chadMessages = messages.filter(m => m.source === 'chad');
-
   const panelContent = (
     <>
-      {/* Header with actions */}
+      {/* Header */}
       <div
-        className={`px-3 py-2 border-b border-gray-700 flex items-center justify-between ${floating ? 'cursor-move' : ''}`}
+        className={`px-3 py-2 border-b border-blue-900/50 bg-[#0a1628] flex items-center justify-between ${floating ? 'cursor-move' : ''}`}
         onMouseDown={handleMouseDown}
       >
         <div className="flex items-center gap-2">
           {floating && <Move size={12} className="text-gray-500" />}
-          <span className="text-xs text-orange-400">{claudeMessages.length} Claude</span>
-          <span className="text-xs text-gray-600">|</span>
-          <span className="text-xs text-blue-400">{chadMessages.length} Chad</span>
+          <Bot className="w-4 h-4 text-blue-400" />
+          <span className="text-sm font-medium text-blue-400">External Claude</span>
+          <span className="text-xs text-blue-400/60">[{messages.length} msgs]</span>
           {session && (
             <span className="text-xs text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded ml-2">
               Active
@@ -168,7 +131,7 @@ export function ChatLogPanel({
           <button
             onClick={onEndSession}
             disabled={!session || messages.length < 2}
-            className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-orange-400 disabled:opacity-50"
+            className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-blue-400 disabled:opacity-50"
             title="End Session & Summarize"
           >
             <Save size={14} />
@@ -176,115 +139,79 @@ export function ChatLogPanel({
         </div>
       </div>
 
-      {/* Two-column layout for separate conversations */}
+      {/* Messages */}
       {!isMinimized && (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Claude Column */}
-          <div className="flex-1 flex flex-col border-r border-gray-700">
-            <div className="px-2 py-1 bg-orange-900/20 border-b border-gray-700">
-              <span className="text-xs font-medium text-orange-400">👨‍💻 Claude - Lead</span>
-            </div>
-            <div className="flex-1 overflow-auto p-2 space-y-2">
-              {claudeMessages.map((msg) => {
-                const style = getSourceStyle(msg.source, msg.role);
-                return (
-                  <div
-                    key={msg.id}
-                    className={`text-xs p-2 rounded ${style.bg} border-l-2 ${style.border}`}
-                  >
-                    <div className={`font-medium mb-1 ${style.label} flex items-center gap-2`}>
-                      <span>{msg.role === 'user' ? 'You' : 'Claude'}</span>
-                      <span className="text-gray-600 text-[10px]">
-                        {msg.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-gray-300 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-                      {msg.content}
-                    </div>
-                  </div>
-                );
-              })}
-              {claudeMessages.length === 0 && (
-                <div className="text-xs text-gray-600 text-center py-4">
-                  Connect to Claude terminal to see messages
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-auto p-2 space-y-2">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`text-xs p-2 rounded border-l-2 ${
+                  msg.role === 'user'
+                    ? 'bg-green-900/20 border-green-500'
+                    : 'bg-blue-900/20 border-blue-500'
+                }`}
+              >
+                <div className={`font-medium mb-1 flex items-center gap-2 ${
+                  msg.role === 'user' ? 'text-green-400' : 'text-blue-400'
+                }`}>
+                  <span>{msg.role === 'user' ? '👤 User' : '🤖 Claude'}</span>
+                  <span className="text-gray-600 text-[10px]">
+                    {msg.timestamp.toLocaleTimeString()}
+                  </span>
                 </div>
-              )}
-              <div ref={claudeEndRef} />
-            </div>
-            {/* Claude input field */}
-            <div className="p-2 border-t border-gray-700 bg-gray-800/50">
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={claudeInput}
-                  onChange={(e) => setClaudeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && claudeInput.trim() && onSendToClaudeTerminal) {
-                      onSendToClaudeTerminal(claudeInput.trim());
-                      setClaudeInput('');
-                    }
-                  }}
-                  placeholder="Reply to Claude..."
-                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
-                />
-                <button
-                  onClick={() => {
-                    if (claudeInput.trim() && onSendToClaudeTerminal) {
-                      onSendToClaudeTerminal(claudeInput.trim());
-                      setClaudeInput('');
-                    }
-                  }}
-                  disabled={!claudeInput.trim() || !onSendToClaudeTerminal}
-                  className="px-2 py-1 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs"
-                >
-                  Send
-                </button>
+                <div className="text-gray-300 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+                  {msg.content}
+                </div>
               </div>
-            </div>
+            ))}
+
+            {isSending && streamingContent && (
+              <div className="text-xs p-2 rounded bg-blue-900/20 border-l-2 border-blue-400">
+                <div className="font-medium mb-1 text-blue-300">🤖 Claude</div>
+                <div className="text-gray-300 font-mono text-[11px]">
+                  {streamingContent}
+                  <span className="inline-block w-1 h-3 bg-blue-500 animate-pulse ml-1" />
+                </div>
+              </div>
+            )}
+
+            {messages.length === 0 && !streamingContent && (
+              <div className="text-xs text-gray-600 text-center py-8">
+                Watching External Claude activity...
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Chad Column */}
-          <div className="flex-1 flex flex-col">
-            <div className="px-2 py-1 bg-blue-900/20 border-b border-gray-700">
-              <span className="text-xs font-medium text-blue-400">🧑‍💻 Chad - Assistant</span>
-            </div>
-            <div className="flex-1 overflow-auto p-2 space-y-2">
-              {chadMessages.map((msg) => {
-                const style = getSourceStyle(msg.source, msg.role);
-                return (
-                  <div
-                    key={msg.id}
-                    className={`text-xs p-2 rounded ${style.bg} border-l-2 ${style.border}`}
-                  >
-                    <div className={`font-medium mb-1 ${style.label} flex items-center gap-2`}>
-                      <span>{msg.role === 'user' ? 'You' : 'Chad'}</span>
-                      <span className="text-gray-600 text-[10px]">
-                        {msg.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-gray-300 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-                      {msg.content}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {isSending && streamingContent && (
-                <div className="text-xs p-2 rounded bg-blue-900/20 border-l-2 border-blue-400">
-                  <div className="font-medium mb-1 text-blue-300">Chad</div>
-                  <div className="text-gray-300 font-mono text-[11px]">
-                    {streamingContent}
-                    <span className="inline-block w-1 h-3 bg-blue-500 animate-pulse ml-1" />
-                  </div>
-                </div>
-              )}
-
-              {chadMessages.length === 0 && !streamingContent && (
-                <div className="text-xs text-gray-600 text-center py-4">
-                  Chat with Chad to see messages
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+          {/* Input */}
+          <div className="p-2 border-t border-gray-700 bg-gray-800/50">
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && inputValue.trim() && onSendToClaudeTerminal) {
+                    onSendToClaudeTerminal(inputValue.trim());
+                    setInputValue('');
+                  }
+                }}
+                placeholder="Send to External Claude..."
+                className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={() => {
+                  if (inputValue.trim() && onSendToClaudeTerminal) {
+                    onSendToClaudeTerminal(inputValue.trim());
+                    setInputValue('');
+                  }
+                }}
+                disabled={!inputValue.trim() || !onSendToClaudeTerminal}
+                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs"
+              >
+                Send
+              </button>
             </div>
           </div>
         </div>
@@ -292,17 +219,16 @@ export function ChatLogPanel({
     </>
   );
 
-  // Floating mode - draggable overlay (wide enough for 2 columns like Slack)
   if (floating) {
     return (
       <div
         ref={panelRef}
-        className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg shadow-2xl flex flex-col"
+        className="fixed z-50 bg-gray-900 border border-blue-600 rounded-lg shadow-2xl flex flex-col"
         style={{
           left: position.x,
           top: position.y,
-          width: isMinimized ? '200px' : '700px',
-          height: isMinimized ? 'auto' : '500px',
+          width: isMinimized ? '200px' : '400px',
+          height: isMinimized ? 'auto' : '400px',
           maxHeight: '80vh',
         }}
       >
@@ -311,7 +237,6 @@ export function ChatLogPanel({
     );
   }
 
-  // Docked mode - normal sidebar panel
   return (
     <div className="flex flex-col h-full -m-3">
       {panelContent}
