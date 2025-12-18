@@ -11,16 +11,33 @@ export interface ChatLogMessage {
   timestamp: Date;
 }
 
+interface Session {
+  id: string;
+  status: string;
+}
+
 interface ChatLogPanelProps {
   messages: ChatLogMessage[];
   streamingContent?: string;
   isSending?: boolean;
+  session?: Session | null;
+  onSummarize?: () => void;
+  onEndSession?: () => void;
+  isSummarizing?: boolean;
+  onSendToClaudeTerminal?: (message: string) => void;
+  onSendToChad?: (message: string) => void;
 }
 
 export function ChatLogPanel({
   messages,
   streamingContent = '',
   isSending = false,
+  session,
+  onSummarize,
+  onEndSession,
+  isSummarizing,
+  onSendToClaudeTerminal,
+  onSendToChad,
 }: ChatLogPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
