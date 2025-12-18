@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Project } from '../types';
+
+interface Client {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 interface ProjectFormProps {
   project: Project | null;
@@ -11,10 +17,12 @@ interface ProjectFormProps {
 }
 
 export default function ProjectForm({ project, onClose, onSave }: ProjectFormProps) {
+  const [clients, setClients] = useState<Client[]>([]);
   const [formData, setFormData] = useState({
     name: project?.name || '',
     slug: project?.slug || '',
     description: project?.description || '',
+    client_id: project?.client_id || '',
     droplet_name: project?.droplet_name || '',
     droplet_ip: project?.droplet_ip || '',
     server_path: project?.server_path || '',
@@ -29,7 +37,23 @@ export default function ProjectForm({ project, onClose, onSave }: ProjectFormPro
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      if (data.success) {
+        setClients(data.clients);
+      }
+    } catch (err) {
+      console.error('Failed to fetch clients:', err);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -45,6 +69,7 @@ export default function ProjectForm({ project, onClose, onSave }: ProjectFormPro
     try {
       const payload = {
         ...formData,
+        client_id: formData.client_id || null,
         port_dev: formData.port_dev ? parseInt(formData.port_dev) : null,
         port_test: formData.port_test ? parseInt(formData.port_test) : null,
         port_prod: formData.port_prod ? parseInt(formData.port_prod) : null,
@@ -99,6 +124,24 @@ export default function ProjectForm({ project, onClose, onSave }: ProjectFormPro
           )}
 
           <div className="grid grid-cols-2 gap-4">
+            {/* Client Selector - Full Width at Top */}
+            <div className="col-span-2">
+              <label className="block text-sm text-gray-400 mb-1">Client</label>
+              <select
+                name="client_id"
+                value={formData.client_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">-- No Client --</option>
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Name */}
             <div>
               <label className="block text-sm text-gray-400 mb-1">Name *</label>

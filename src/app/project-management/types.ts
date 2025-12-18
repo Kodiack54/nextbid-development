@@ -20,6 +20,7 @@ export interface Project {
   build_number?: string;
   is_active: boolean;
   sort_order?: number;
+  client_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -98,7 +99,7 @@ export interface Bug {
   resolved_at?: string;
 }
 
-export type TabType = 'todos' | 'knowledge' | 'docs' | 'database' | 'structure' | 'code-changes' | 'notepad' | 'bugs';
+export type TabType = 'todos' | 'knowledge' | 'docs' | 'database' | 'structure' | 'conventions' | 'notepad' | 'bugs';
 
 export interface TabConfig {
   id: TabType;
@@ -112,7 +113,7 @@ export const TABS: TabConfig[] = [
   { id: 'docs', label: 'Docs', icon: 'FileText' },
   { id: 'database', label: 'Database', icon: 'Database' },
   { id: 'structure', label: 'Structure', icon: 'FolderTree' },
-  { id: 'code-changes', label: 'Code Changes', icon: 'GitCommit' },
+  { id: 'conventions', label: 'Conventions', icon: 'BookOpen' },
   { id: 'notepad', label: 'Notepad', icon: 'StickyNote' },
   { id: 'bugs', label: 'Bug Reports', icon: 'Bug' },
 ];
