@@ -132,14 +132,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save worker state
-    await db
-      .from('dev_worker_state')
-      .upsert({
-        worker_key: WORKER_STATE_KEY,
-        state: lastProcessed,
-        last_run_at: new Date().toISOString()
-      }, { onConflict: 'worker_key' });
+    // Save worker state using raw SQL upsert
+    await db.query(
+      `INSERT INTO dev_worker_state (worker_key, state, last_run_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (worker_key) DO UPDATE SET
+         state = EXCLUDED.state,
+         last_run_at = EXCLUDED.last_run_at`,
+      [WORKER_STATE_KEY, JSON.stringify(lastProcessed), new Date().toISOString()]
+    );
 
     console.log(`=== CATALOGER WORKER COMPLETED in ${Date.now() - startTime}ms ===\n`);
 
