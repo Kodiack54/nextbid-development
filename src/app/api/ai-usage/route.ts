@@ -227,39 +227,42 @@ export async function POST(request: NextRequest) {
 
     const cost_usd = calculateCost(model, input_tokens, output_tokens);
 
-    const { data: budgets } = await db
+    const { data: budgetsData2 } = await db
       .from('dev_ai_budgets')
       .select('*')
       .eq('is_active', true);
+    const budgets2 = budgetsData2 as Array<Record<string, unknown>> | null;
 
-    const teamBudget = budgets?.find((b) => !b.user_id);
+    const teamBudget = budgets2?.find((b) => !b.user_id) as Record<string, unknown> | undefined;
 
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const { data: monthUsage } = await db
+    const { data: monthUsageData } = await db
       .from('dev_ai_usage')
       .select('cost_usd')
       .gte('created_at', startOfMonth.toISOString());
+    const monthUsage = monthUsageData as Array<Record<string, unknown>> | null;
 
-    const currentMonthCost = monthUsage?.reduce((sum, row) => sum + parseFloat(row.cost_usd), 0) || 0;
+    const currentMonthCost = monthUsage?.reduce((sum, row) => sum + parseFloat(String(row.cost_usd)), 0) || 0;
     const newTotalCost = currentMonthCost + cost_usd;
 
     let warning = null;
     if (teamBudget) {
-      const percentUsed = (newTotalCost / teamBudget.monthly_limit_usd) * 100;
+      const monthlyLimit = Number(teamBudget.monthly_limit_usd) || 200;
+      const percentUsed = (newTotalCost / monthlyLimit) * 100;
       if (percentUsed >= 100 && teamBudget.hard_limit) {
         return NextResponse.json(
           {
             error: 'Monthly AI budget exceeded',
-            budget: teamBudget.monthly_limit_usd,
+            budget: monthlyLimit,
             used: Math.round(newTotalCost * 100) / 100,
           },
           { status: 429 }
         );
-      } else if (percentUsed >= teamBudget.warning_threshold_percent) {
-        warning = `AI budget at ${Math.round(percentUsed)}% (${Math.round(newTotalCost * 100) / 100} / ${teamBudget.monthly_limit_usd})`;
+      } else if (percentUsed >= Number(teamBudget.warning_threshold_percent || 80)) {
+        warning = `AI budget at ${Math.round(percentUsed)}% (${Math.round(newTotalCost * 100) / 100} / ${monthlyLimit})`;
       }
     }
 
