@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store full extracted data in a dedicated table for querying
-    const { data: scrubbingRecord, error: insertError } = await db
+    const { data: scrubbingRecordData, error: insertError } = await db
       .from('dev_session_scrubbing')
       .insert({
         session_id,
@@ -300,6 +300,7 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+    const scrubbingRecord = scrubbingRecordData as Record<string, unknown> | null;
 
     if (insertError) {
       console.error('Error saving scrubbing record:', insertError);
@@ -311,7 +312,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       session_id,
-      scrubbing_id: scrubbingRecord?.id,
+      scrubbing_id: scrubbingRecord?.id as string | undefined,
       extracted_data: extractedData,
       usage: {
         input_tokens: inputTokens,
