@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 // Known prefixes to scan for - add more as needed
 const KNOWN_PREFIXES = [
   'dev',
+  'dev_ai',
   'nextbid',
   'lowvoltage',
   'nextbidder',
@@ -15,6 +16,7 @@ const KNOWN_PREFIXES = [
 // Friendly names for auto-discovered prefixes
 const PREFIX_NAMES: Record<string, string> = {
   'dev': 'Gateway / Dev Studio',
+  'dev_ai': 'AI Workers',
   'nextbid': 'NextBid Portal',
   'lowvoltage': 'LowVoltage Bidding',
   'nextbidder': 'NextBidder',
@@ -22,6 +24,12 @@ const PREFIX_NAMES: Record<string, string> = {
   'nexttask': 'NextTask',
   'nexttech': 'NextTech'
 };
+
+interface ColumnInfo {
+  table_name: string;
+  column_name: string;
+  data_type: string;
+}
 
 /**
  * POST /api/refresh-schema
@@ -38,24 +46,28 @@ export async function POST() {
       tableCount: number;
     }> = {};
 
-    // Scan each known prefix
+    // Scan each known prefix using raw SQL
     for (const prefix of KNOWN_PREFIXES) {
       console.log('Scanning prefix:', prefix + '_');
 
-      // Try RPC first
-      let columns: any[] | null = null;
+      // Query information_schema for tables matching this prefix
+      const result = await db.query<ColumnInfo>(`
+        SELECT
+          c.table_name,
+          c.column_name,
+          c.data_type
+        FROM information_schema.columns c
+        JOIN information_schema.tables t ON c.table_name = t.table_name
+        WHERE t.table_schema = 'public'
+          AND t.table_type = 'BASE TABLE'
+          AND c.table_name LIKE $1
+        ORDER BY c.table_name, c.ordinal_position
+      `, [`${prefix}_%`]);
 
-      try {
-        const result = await db.rpc('get_columns_for_prefix', { prefix });
-        if (result.data && result.data.length > 0) {
-          columns = result.data;
-        }
-      } catch (e) {
-        // RPC might not exist, continue
-      }
+      const columns = (result.data || []) as ColumnInfo[];
 
       // If no columns found, skip this prefix
-      if (!columns || columns.length === 0) {
+      if (columns.length === 0) {
         console.log('No tables found for prefix:', prefix + '_');
         continue;
       }
@@ -84,26 +96,27 @@ export async function POST() {
     }
 
     // Get existing projects
-    const { data: existingProjects } = await db
+    const { data: existingProjectsData } = await db
       .from('dev_projects')
       .select('id, name, table_prefix, is_active');
+    const existingProjects = (existingProjectsData || []) as Array<Record<string, unknown>>;
 
     const updatedProjects: string[] = [];
     const createdProjects: string[] = [];
 
     // Update or create project for each discovered prefix
     for (const [prefix, data] of Object.entries(allSchemas)) {
-      const existingProject = existingProjects?.find(p => p.table_prefix === prefix);
+      const existingProject = existingProjects.find(p => p.table_prefix === prefix);
 
       if (existingProject) {
         // Update existing project
         const { error } = await db
           .from('dev_projects')
           .update({ database_schema: data.schema })
-          .eq('id', existingProject.id);
+          .eq('id', existingProject.id as string);
 
         if (!error) {
-          updatedProjects.push(existingProject.name);
+          updatedProjects.push(String(existingProject.name));
         }
       } else {
         // Create new project entry for this prefix
@@ -162,14 +175,15 @@ export async function POST() {
  * Get current schema info
  */
 export async function GET() {
-  const { data: projects } = await db
+  const { data: projectsData } = await db
     .from('dev_projects')
     .select('id, name, table_prefix, database_schema');
+  const projects = (projectsData || []) as Array<Record<string, unknown>>;
 
-  const summary = projects?.map(p => ({
+  const summary = projects.map(p => ({
     name: p.name,
     prefix: p.table_prefix,
-    table_count: p.database_schema ? Object.keys(p.database_schema).length : 0
+    table_count: p.database_schema ? Object.keys(p.database_schema as Record<string, unknown>).length : 0
   }));
 
   return NextResponse.json({
