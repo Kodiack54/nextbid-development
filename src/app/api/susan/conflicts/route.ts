@@ -31,16 +31,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch conflicts' }, { status: 500 });
     }
 
-    // Get pending count
-    const { count: pendingCount } = await db
-      .from('dev_ai_conflicts')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+    // Get pending count using raw SQL
+    const countResult = await db.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM dev_ai_conflicts WHERE status = $1`,
+      ['pending']
+    );
+    const countRows = countResult.data as Array<{ count: string }> | null;
+    const pendingCount = countRows && countRows[0] ? parseInt(countRows[0].count, 10) : 0;
 
     return NextResponse.json({
       success: true,
       conflicts: conflicts || [],
-      pendingCount: pendingCount || 0
+      pendingCount
     });
   } catch (error) {
     console.error('Error in conflicts GET:', error);
@@ -66,11 +68,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the conflict
-    const { data: conflict, error: fetchErr } = await db
+    const { data: conflictData, error: fetchErr } = await db
       .from('dev_ai_conflicts')
       .select('*')
       .eq('id', conflict_id)
       .single();
+    const conflict = conflictData as Record<string, unknown> | null;
 
     if (fetchErr || !conflict) {
       return NextResponse.json({ error: 'Conflict not found' }, { status: 404 });
@@ -78,34 +81,35 @@ export async function POST(request: NextRequest) {
 
     // Apply resolution
     if (resolution === 'keep_new' || resolution === 'keep_both') {
-      const newItem = conflict.new_item;
-      const tableName = `dev_ai_${conflict.conflict_type}s`; // todos, knowledge, decisions
+      const newItem = conflict.new_item as Record<string, unknown> | undefined;
+      const conflictType = String(conflict.conflict_type);
+      const tableName = `dev_ai_${conflictType}s`; // todos, knowledge, decisions
 
       // Build insert object based on conflict type
       let insertData: Record<string, unknown> = {
         project_path: conflict.project_path,
-        title: newItem.title
+        title: newItem?.title
       };
 
-      if (conflict.conflict_type === 'todo') {
+      if (conflictType === 'todo') {
         insertData = {
           ...insertData,
-          description: newItem.description,
-          priority: newItem.priority || 'medium',
+          description: newItem?.description,
+          priority: newItem?.priority || 'medium',
           status: 'pending'
         };
-      } else if (conflict.conflict_type === 'knowledge') {
+      } else if (conflictType === 'knowledge') {
         insertData = {
           ...insertData,
-          summary: newItem.content || newItem.summary,
-          category: newItem.category || 'general',
+          summary: newItem?.content || newItem?.summary,
+          category: newItem?.category || 'general',
           importance: 5
         };
-      } else if (conflict.conflict_type === 'decision') {
+      } else if (conflictType === 'decision') {
         insertData = {
           ...insertData,
-          decision: newItem.content || newItem.decision,
-          rationale: newItem.rationale || ''
+          decision: newItem?.content || newItem?.decision,
+          rationale: newItem?.rationale || ''
         };
       }
 
