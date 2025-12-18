@@ -384,11 +384,12 @@ async function upsertProjectKnowledge(
   knowledge: Record<string, unknown>,
   sessionId: string
 ) {
-  const { data: existing } = await db
+  const { data: existingData } = await db
     .from('dev_project_knowledge')
     .select('id')
     .eq('project_id', projectId)
     .single();
+  const existing = existingData as Record<string, unknown> | null;
 
   const record = {
     project_id: projectId,
@@ -404,7 +405,7 @@ async function upsertProjectKnowledge(
     await db
       .from('dev_project_knowledge')
       .update(record)
-      .eq('id', existing.id);
+      .eq('id', existing.id as string);
   } else {
     await db
       .from('dev_project_knowledge')
