@@ -770,17 +770,19 @@ async function checkAndCreateAlerts(
  * Check worker status and last run info
  */
 export async function GET() {
-  const { data: workerState } = await db
+  const { data: workerStateData } = await db
     .from('dev_worker_state')
     .select('*')
     .eq('worker_key', WORKER_STATE_KEY)
     .single();
+  const workerState = workerStateData as Record<string, unknown> | null;
+  const stateObj = (workerState?.state as Record<string, unknown>) || {};
 
   return NextResponse.json({
     success: true,
     worker_key: WORKER_STATE_KEY,
     last_run_at: workerState?.last_run_at || null,
-    projects_tracked: Object.keys(workerState?.state || {}).length,
-    state: workerState?.state || {}
+    projects_tracked: Object.keys(stateObj).length,
+    state: stateObj
   });
 }
