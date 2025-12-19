@@ -1,20 +1,6 @@
 'use client';
 
-interface Session {
-  id: string;
-  title: string;
-  status: 'pending_capture' | 'captured' | 'pending_scrub' | 'scrubbed' | 'pending_categorize' | 'categorized';
-  started_at: string;
-  ended_at?: string;
-  summary?: string;
-  message_count?: number;
-  source_type?: string;
-  source_name?: string;
-  project_path?: string;
-  processed_by_chad?: boolean;
-  processed_by_jen?: boolean;
-  processed_by_susan?: boolean;
-}
+import type { Session } from '../types';
 
 interface SessionsListProps {
   sessions: Session[];

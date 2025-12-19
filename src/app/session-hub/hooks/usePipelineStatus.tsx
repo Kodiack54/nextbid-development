@@ -1,45 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { WorkerStatus, Session, BucketData } from '../types';
 
 // Service URLs
 const CHAD_URL = process.env.NEXT_PUBLIC_CHAD_URL || 'http://161.35.229.220:5401';
 const JEN_URL = process.env.NEXT_PUBLIC_JEN_URL || 'http://161.35.229.220:5407';
 const SUSAN_URL = process.env.NEXT_PUBLIC_SUSAN_URL || 'http://161.35.229.220:5403';
-
-interface WorkerStatus {
-  isRunning: boolean;
-  queue: number;
-  processed: number;
-  lastActivity: string | null;
-  error: string | null;
-}
-
-interface Session {
-  id: string;
-  title: string;
-  status: string;
-  started_at: string;
-  ended_at?: string;
-  summary?: string;
-  message_count?: number;
-  source_type?: string;
-  source_name?: string;
-  project_path?: string;
-  processed_by_chad?: boolean;
-  processed_by_jen?: boolean;
-  processed_by_susan?: boolean;
-}
-
-interface BucketData {
-  bugs: number;
-  features: number;
-  todos: number;
-  errors: number;
-  knowledge: number;
-  decisions: number;
-  total: number;
-}
 
 const defaultWorkerStatus: WorkerStatus = {
   isRunning: false,
