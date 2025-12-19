@@ -26,6 +26,7 @@ import {
 } from '../components/panels';
 import ProjectManagementPanel from './project-management/ProjectManagementPanel';
 import BrowserPage from './browser/BrowserPage';
+import SessionHubPage from './session-hub/SessionHubPage';
 import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
 import type { ConversationMessage } from '../components/panels/ClaudeTerminal';
 // Claude uses Terminal (subscription), Chad uses API chat
@@ -707,7 +708,7 @@ User: The Boss`;
         </div>
 
         {/* Pop-out Panel - Overlay (not for 'projects' which shows in main area) */}
-        {activePanel && activePanel !== 'projects' && activePanel !== 'browser' && (
+        {activePanel && activePanel !== 'projects' && activePanel !== 'browser' && activePanel !== 'hub' && (
           <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "docs" ? "w-[600px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
             <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
               <span className="text-sm font-medium text-white flex items-center gap-2">
@@ -838,6 +839,8 @@ User: The Boss`;
                 <div className="flex-1 overflow-auto p-4">
                   <ProjectManagementPanel onProjectsChange={fetchProjects} />
                 </div>
+              ) : activePanel === 'hub' ? (
+                <SessionHubPage projectId={selectedProject?.id} userId={user?.id} />
               ) : (
                 <BrowserPage project={selectedProject} env={selectedEnv} userId={user?.id} />
               )}
