@@ -1,22 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { DoorOpen, Map } from 'lucide-react';
-
-// Contexts & Hooks
-import { useUser, useMinRole } from './contexts/UserContext';
-import { useSession } from '../hooks/useSession';
-
-// Dropdowns
-import { ChatDropdown, TimeClockDropdown, SettingsDropdown, AITeamChat } from '../components/dropdowns';
-
-// Panels
 import {
   FilesPanel,
-  TerminalPanel,
+  TabbedTerminal,
   AIUsagePanel,
-  BrowserPanel,
-  BrowserPreview,
   SchemaPanel,
   ChatLogPanel,
   SessionHubPanel,
@@ -27,6 +14,7 @@ import {
   RoadmapPanel,
 } from '../components/panels';
 import ProjectManagementPanel from './project-management/ProjectManagementPanel';
+import BrowserPage from './browser/BrowserPage';
 import type { ChatLogMessage } from '../components/panels/ChatLogPanel';
 import type { ConversationMessage } from '../components/panels/ClaudeTerminal';
 // Claude uses Terminal (subscription), Chad uses API chat
@@ -701,14 +689,14 @@ User: The Boss`;
         </div>
 
         {/* Pop-out Panel - Overlay (not for 'projects' which shows in main area) */}
-        {activePanel && activePanel !== 'projects' && (
+        {activePanel && activePanel !== 'projects' && activePanel !== 'browser' && (
           <div className={`absolute left-14 top-14 bottom-0 ${activePanel === "docs" ? "w-[600px]" : "w-72"} bg-gray-850 border-r border-gray-700 flex flex-col z-40 shadow-xl`}>
             <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
               <span className="text-sm font-medium text-white flex items-center gap-2">
                 {activePanel === 'files' && '📁 File Manager'}
                 {activePanel === 'terminal' && '💻 Terminal'}
                 {activePanel === 'ai-usage' && '💰 AI Usage'}
-                {activePanel === 'browser' && '🌐 Virtual Browser'}
+                
                 {activePanel === 'schema' && <><SupabaseLogo /> DB Schema</>}
                 {activePanel === 'chatlog' && '📜 Chat Log'}
                 {activePanel === 'hub' && '🎯 Session Hub'}
@@ -721,9 +709,9 @@ User: The Boss`;
             </div>
             <div className="flex-1 overflow-auto p-3">
               {activePanel === 'files' && <FilesPanel project={selectedProject} />}
-              {activePanel === 'terminal' && <TerminalPanel project={selectedProject} env={selectedEnv} />}
+              {activePanel === 'terminal' && <TabbedTerminal />}
               {activePanel === 'ai-usage' && <AIUsagePanel />}
-              {activePanel === 'browser' && <BrowserPanel />}
+              
               {activePanel === 'schema' && <div id="schema-panel-slot" />}
               {activePanel === 'chatlog' && (
                 <ChatLogPanel
@@ -833,7 +821,7 @@ User: The Boss`;
                   <ProjectManagementPanel onProjectsChange={fetchProjects} />
                 </div>
               ) : (
-                <BrowserPreview project={selectedProject} env={selectedEnv} userId={user?.id} />
+                <BrowserPage project={selectedProject} env={selectedEnv} userId={user?.id} />
               )}
             </div>
 
