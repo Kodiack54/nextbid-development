@@ -1,6 +1,6 @@
 {
   "name": "dev-studio-5000",
-  "version": "1.0.3",
+  "version": "1.0.56",
   "private": true,
   "scripts": {
     "dev": "next dev -p 5000",
@@ -14,18 +14,18 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@supabase/supabase-js": "^2.47.10",
-    "pg": "^8.13.1",
-    "@types/pg": "^8.11.10",
+    "@types/pg": "^8.16.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
     "lucide-react": "^0.561.0",
     "next": "^15.1.0",
     "node-pty": "^1.0.0",
+    "pg": "^8.16.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "ws": "^8.18.3",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

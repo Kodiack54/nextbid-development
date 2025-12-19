@@ -4,14 +4,25 @@ import { db } from '@/lib/db';
 /**
  * GET /api/projects
  * List all projects with their current lock status
+ * Optional: ?client_id=xxx to filter by client
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get all active projects
-    const { data: projectsData, error: projectsError } = await db
+    const { searchParams } = new URL(request.url);
+    const clientId = searchParams.get('client_id');
+
+    // Build query
+    let query = db
       .from('dev_projects')
       .select('*')
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    // Filter by client if provided
+    if (clientId) {
+      query = query.eq('client_id', clientId);
+    }
+
+    const { data: projectsData, error: projectsError } = await query
       .order('sort_order', { ascending: true });
     const projects = (projectsData || []) as Array<Record<string, unknown>>;
 
@@ -73,6 +84,7 @@ export async function POST(request: NextRequest) {
       port_test,
       port_prod,
       created_by,
+      client_id,
     } = body;
 
     if (!name || !slug) {
@@ -119,6 +131,7 @@ export async function POST(request: NextRequest) {
         port_test,
         port_prod,
         created_by,
+        client_id,
         sort_order,
       })
       .select()

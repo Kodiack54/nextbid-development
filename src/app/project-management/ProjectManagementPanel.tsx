@@ -12,9 +12,9 @@ import TodosTab from './tabs/TodosTab';
 import DocsTab from './tabs/DocsTab';
 import DatabaseTab from './tabs/DatabaseTab';
 import StructureTab from './tabs/StructureTab';
-import CodeChangesTab from './tabs/CodeChangesTab';
 import NotepadTab from './tabs/NotepadTab';
 import BugsTab from './tabs/BugsTab';
+import ConventionsTab from './tabs/ConventionsTab';
 import KnowledgeTab from './tabs/KnowledgeTab';
 
 interface ProjectSummary {
@@ -167,8 +167,9 @@ export default function ProjectManagementPanel({ onProjectsChange }: ProjectMana
         return <DatabaseTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'structure':
         return <StructureTab projectPath={projectPath} projectId={selectedProject.id} />;
-      case 'code-changes':
-        return <CodeChangesTab projectPath={projectPath} projectId={selectedProject.id} />;
+      
+      case 'conventions':
+        return <ConventionsTab projectPath={projectPath} projectId={selectedProject.id} />;
       case 'notepad':
         return <NotepadTab projectPath={projectPath} />;
       case 'bugs':

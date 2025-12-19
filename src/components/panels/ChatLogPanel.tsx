@@ -1,320 +1,186 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { FileText, Save, Move, Minimize2, Maximize2 } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Bot, User, RefreshCw } from 'lucide-react';
 
-// Unified message format for both Claude and Chad
 export interface ChatLogMessage {
   id: string;
-  source: 'claude' | 'chad';
+  source: 'claude' | 'chad' | 'external';
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
 }
 
-interface Session {
-  id: string;
-  status: string;
-}
-
 interface ChatLogPanelProps {
-  messages: ChatLogMessage[];
+  messages?: ChatLogMessage[];
   streamingContent?: string;
   isSending?: boolean;
-  session: Session | null;
-  onSummarize: () => void;
-  onEndSession: () => void;
-  isSummarizing: boolean;
-  // For floating mode
-  floating?: boolean;
-  onToggleFloating?: () => void;
-  // Chat handlers for sending messages
+  session?: any;
+  onSummarize?: () => void;
+  onEndSession?: () => void;
+  isSummarizing?: boolean;
   onSendToClaudeTerminal?: (message: string) => void;
   onSendToChad?: (message: string) => void;
 }
 
+const CHAD_URL = process.env.NEXT_PUBLIC_CHAD_URL || 'http://161.35.229.220:5401';
+
 export function ChatLogPanel({
-  messages,
+  messages: propMessages = [],
   streamingContent = '',
   isSending = false,
-  session,
-  onSummarize,
-  onEndSession,
-  isSummarizing,
-  floating = false,
-  onToggleFloating,
-  onSendToClaudeTerminal,
-  onSendToChad,
 }: ChatLogPanelProps) {
-  const [position, setPosition] = useState({ x: 100, y: 100 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [claudeInput, setClaudeInput] = useState('');
-  const [chadInput, setChadInput] = useState('');
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [liveMessages, setLiveMessages] = useState<ChatLogMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const claudeEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Connect to Chad's WebSocket for live terminal output
+  useEffect(() => {
+    const connect = () => {
+      try {
+        const ws = new WebSocket(`ws://161.35.229.220:5401/ws?mode=monitor&source=ui-chatlog`);
+        
+        ws.onopen = () => {
+          setIsConnected(true);
+          console.log('[ChatLog] Connected to Chad');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'monitor_output' && data.data) {
+              // Parse terminal output for user/assistant messages
+              const lines = data.data.split('\n');
+              for (const line of lines) {
+                if (line.includes('[👤 User]') || line.includes('[🤖 External Claude]')) {
+                  const isUser = line.includes('[👤 User]');
+                  const content = line.replace(/\[👤 User\]|\[🤖 External Claude\]/g, '').trim();
+                  if (content) {
+                    setLiveMessages(prev => [...prev.slice(-100), {
+                      id: Date.now().toString() + Math.random(),
+                      source: 'external',
+                      role: isUser ? 'user' : 'assistant',
+                      content,
+                      timestamp: new Date()
+                    }]);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Not JSON, ignore
+          }
+        };
+
+        ws.onclose = () => {
+          setIsConnected(false);
+          setTimeout(connect, 5000);
+        };
+
+        ws.onerror = () => {
+          setIsConnected(false);
+        };
+
+        wsRef.current = ws;
+      } catch (err) {
+        console.error('[ChatLog] WebSocket error:', err);
+        setTimeout(connect, 5000);
+      }
+    };
+
+    connect();
+
+    return () => {
+      wsRef.current?.close();
+    };
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+  }, [liveMessages, propMessages, streamingContent]);
 
-  // Dragging handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!floating) return;
-    setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
+  const formatTime = (date: Date) => {
+    return new Date(date).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  useEffect(() => {
-    if (!isDragging) return;
+  // Combine prop messages with live messages
+  const allMessages = [...propMessages, ...liveMessages];
 
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      });
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragOffset]);
-
-  // Source colors and labels
-  const getSourceStyle = (source: 'claude' | 'chad', role: 'user' | 'assistant') => {
-    if (role === 'user') {
-      return {
-        bg: source === 'claude' ? 'bg-orange-900/30' : 'bg-blue-900/30',
-        border: source === 'claude' ? 'border-orange-500' : 'border-blue-500',
-        label: source === 'claude' ? 'text-orange-400' : 'text-blue-400',
-        name: 'You',
-      };
-    }
-    return {
-      bg: source === 'claude' ? 'bg-orange-900/20' : 'bg-blue-900/20',
-      border: source === 'claude' ? 'border-orange-400' : 'border-blue-400',
-      label: source === 'claude' ? 'text-orange-300' : 'text-blue-300',
-      name: source === 'claude' ? '👨‍💻 Claude' : '🧑‍💻 Chad',
-    };
-  };
-
-  // Separate messages by source
-  const claudeMessages = messages.filter(m => m.source === 'claude');
-  const chadMessages = messages.filter(m => m.source === 'chad');
-
-  const panelContent = (
-    <>
-      {/* Header with actions */}
-      <div
-        className={`px-3 py-2 border-b border-gray-700 flex items-center justify-between ${floating ? 'cursor-move' : ''}`}
-        onMouseDown={handleMouseDown}
-      >
-        <div className="flex items-center gap-2">
-          {floating && <Move size={12} className="text-gray-500" />}
-          <span className="text-xs text-orange-400">{claudeMessages.length} Claude</span>
-          <span className="text-xs text-gray-600">|</span>
-          <span className="text-xs text-blue-400">{chadMessages.length} Chad</span>
-          {session && (
-            <span className="text-xs text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded ml-2">
-              Active
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {floating && (
-            <button
-              onClick={() => setIsMinimized(!isMinimized)}
-              className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
-              title={isMinimized ? 'Expand' : 'Minimize'}
-            >
-              {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
-            </button>
-          )}
-          {onToggleFloating && (
-            <button
-              onClick={onToggleFloating}
-              className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
-              title={floating ? 'Dock panel' : 'Float panel'}
-            >
-              <Move size={14} />
-            </button>
-          )}
-          <button
-            onClick={onSummarize}
-            disabled={isSummarizing || messages.length < 2}
-            className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
-            title="Summarize Session"
-          >
-            {isSummarizing ? (
-              <span className="animate-spin text-xs">⏳</span>
-            ) : (
-              <FileText size={14} />
-            )}
-          </button>
-          <button
-            onClick={onEndSession}
-            disabled={!session || messages.length < 2}
-            className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-orange-400 disabled:opacity-50"
-            title="End Session & Summarize"
-          >
-            <Save size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Two-column layout for separate conversations */}
-      {!isMinimized && (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Claude Column */}
-          <div className="flex-1 flex flex-col border-r border-gray-700">
-            <div className="px-2 py-1 bg-orange-900/20 border-b border-gray-700">
-              <span className="text-xs font-medium text-orange-400">👨‍💻 Claude - Lead</span>
-            </div>
-            <div className="flex-1 overflow-auto p-2 space-y-2">
-              {claudeMessages.map((msg) => {
-                const style = getSourceStyle(msg.source, msg.role);
-                return (
-                  <div
-                    key={msg.id}
-                    className={`text-xs p-2 rounded ${style.bg} border-l-2 ${style.border}`}
-                  >
-                    <div className={`font-medium mb-1 ${style.label} flex items-center gap-2`}>
-                      <span>{msg.role === 'user' ? 'You' : 'Claude'}</span>
-                      <span className="text-gray-600 text-[10px]">
-                        {msg.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-gray-300 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-                      {msg.content}
-                    </div>
-                  </div>
-                );
-              })}
-              {claudeMessages.length === 0 && (
-                <div className="text-xs text-gray-600 text-center py-4">
-                  Connect to Claude terminal to see messages
-                </div>
-              )}
-              <div ref={claudeEndRef} />
-            </div>
-            {/* Claude input field */}
-            <div className="p-2 border-t border-gray-700 bg-gray-800/50">
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={claudeInput}
-                  onChange={(e) => setClaudeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && claudeInput.trim() && onSendToClaudeTerminal) {
-                      onSendToClaudeTerminal(claudeInput.trim());
-                      setClaudeInput('');
-                    }
-                  }}
-                  placeholder="Reply to Claude..."
-                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
-                />
-                <button
-                  onClick={() => {
-                    if (claudeInput.trim() && onSendToClaudeTerminal) {
-                      onSendToClaudeTerminal(claudeInput.trim());
-                      setClaudeInput('');
-                    }
-                  }}
-                  disabled={!claudeInput.trim() || !onSendToClaudeTerminal}
-                  className="px-2 py-1 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs"
-                >
-                  Send
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Chad Column */}
-          <div className="flex-1 flex flex-col">
-            <div className="px-2 py-1 bg-blue-900/20 border-b border-gray-700">
-              <span className="text-xs font-medium text-blue-400">🧑‍💻 Chad - Assistant</span>
-            </div>
-            <div className="flex-1 overflow-auto p-2 space-y-2">
-              {chadMessages.map((msg) => {
-                const style = getSourceStyle(msg.source, msg.role);
-                return (
-                  <div
-                    key={msg.id}
-                    className={`text-xs p-2 rounded ${style.bg} border-l-2 ${style.border}`}
-                  >
-                    <div className={`font-medium mb-1 ${style.label} flex items-center gap-2`}>
-                      <span>{msg.role === 'user' ? 'You' : 'Chad'}</span>
-                      <span className="text-gray-600 text-[10px]">
-                        {msg.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-gray-300 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-                      {msg.content}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {isSending && streamingContent && (
-                <div className="text-xs p-2 rounded bg-blue-900/20 border-l-2 border-blue-400">
-                  <div className="font-medium mb-1 text-blue-300">Chad</div>
-                  <div className="text-gray-300 font-mono text-[11px]">
-                    {streamingContent}
-                    <span className="inline-block w-1 h-3 bg-blue-500 animate-pulse ml-1" />
-                  </div>
-                </div>
-              )}
-
-              {chadMessages.length === 0 && !streamingContent && (
-                <div className="text-xs text-gray-600 text-center py-4">
-                  Chat with Chad to see messages
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-
-  // Floating mode - draggable overlay (wide enough for 2 columns like Slack)
-  if (floating) {
-    return (
-      <div
-        ref={panelRef}
-        className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg shadow-2xl flex flex-col"
-        style={{
-          left: position.x,
-          top: position.y,
-          width: isMinimized ? '200px' : '700px',
-          height: isMinimized ? 'auto' : '500px',
-          maxHeight: '80vh',
-        }}
-      >
-        {panelContent}
-      </div>
-    );
-  }
-
-  // Docked mode - normal sidebar panel
   return (
-    <div className="flex flex-col h-full -m-3">
-      {panelContent}
+    <div className="h-full flex flex-col bg-gray-900">
+      {/* Header */}
+      <div className="px-3 py-2 bg-blue-900/30 border-b border-blue-800 flex items-center gap-2">
+        <Bot className="w-4 h-4 text-blue-400" />
+        <span className="text-blue-300 text-sm font-medium">External Claude</span>
+        <span className={`ml-auto w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+        {isSending && (
+          <span className="text-xs text-blue-400 animate-pulse">typing...</span>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-auto p-3 space-y-3">
+        {allMessages.length === 0 && !streamingContent ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 text-sm gap-2">
+            <RefreshCw className={`w-5 h-5 ${isConnected ? 'text-green-400' : 'animate-spin'}`} />
+            <p>{isConnected ? 'Watching External Claude activity...' : 'Connecting to Chad...'}</p>
+          </div>
+        ) : (
+          <>
+            {allMessages.map((msg) => (
+              <div key={msg.id} className="flex gap-2">
+                <div className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
+                  msg.role === 'user' ? 'bg-green-900/50' : 'bg-blue-900/50'
+                }`}>
+                  {msg.role === 'user' ? (
+                    <User className="w-3 h-3 text-green-400" />
+                  ) : (
+                    <Bot className="w-3 h-3 text-blue-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-xs font-medium ${
+                      msg.role === 'user' ? 'text-green-400' : 'text-blue-400'
+                    }`}>
+                      {msg.role === 'user' ? 'User' : 'Claude'}
+                    </span>
+                    <span className="text-gray-600 text-[10px]">
+                      {formatTime(msg.timestamp)}
+                    </span>
+                  </div>
+                  <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {streamingContent && (
+              <div className="flex gap-2">
+                <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0 bg-blue-900/50">
+                  <Bot className="w-3 h-3 text-blue-400 animate-pulse" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-medium text-blue-400">Claude</span>
+                    <span className="text-gray-600 text-[10px]">now</span>
+                  </div>
+                  <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap break-words">
+                    {streamingContent}
+                    <span className="animate-pulse">▊</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 }

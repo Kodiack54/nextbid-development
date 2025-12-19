@@ -12,5 +12,5 @@ export { DocsPanel } from './DocsPanel';
 export { ClaudeTerminal } from './ClaudeTerminal';
 export { SystemHealthPanel } from './SystemHealthPanel';
 export { RoadmapPanel } from './RoadmapPanel';
-export { ServerClaudeViewer } from './ServerClaudeViewer';
 export { TabbedTerminal } from './TabbedTerminal';
+export { ServerClaudeViewer } from './ServerClaudeViewer';

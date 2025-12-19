@@ -1,5 +1,16 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
+import { DoorOpen, Map } from 'lucide-react';
+
+// Contexts & Hooks
+import { useUser, useMinRole } from './contexts/UserContext';
+import { useSession } from '../hooks/useSession';
+
+// Dropdowns
+import { ChatDropdown, TimeClockDropdown, SettingsDropdown, AITeamChat, ClientDropdown } from '../components/dropdowns';
+
+// Panels
 import {
   FilesPanel,
   TabbedTerminal,
@@ -74,6 +85,7 @@ export default function DevEnvironmentPage() {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [showRoadmap, setShowRoadmap] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
   // Toggle between Claude (Sonnet) and Chad (Haiku)
@@ -250,7 +262,7 @@ export default function DevEnvironmentPage() {
   // Fetch projects on mount
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [selectedClientId]);
 
   // Auto-scroll chat to bottom when messages change
   useEffect(() => {
@@ -284,7 +296,8 @@ export default function DevEnvironmentPage() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
+      const url = selectedClientId ? `/api/projects?client_id=${selectedClientId}` : '/api/projects';
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setProjects(data.projects);
@@ -602,6 +615,11 @@ User: The Boss`;
           </button>
         </div>
 
+        {/* Client Selector */}
+        <ClientDropdown
+          selectedClientId={selectedClientId}
+          onClientChange={setSelectedClientId}
+        />
         <div className="flex items-center space-x-2">
           <div className="flex items-center gap-2 pr-2 border-r border-gray-700">
             <span className="text-sm text-gray-400">{user.name}</span>
@@ -827,7 +845,7 @@ User: The Boss`;
 
             {/* Claude Code Terminal - 1/3 */}
             <div className="flex-1 min-w-0 max-w-lg flex flex-col bg-gray-850">
-              <ClaudeTerminal
+              <TabbedTerminal
                 sendRef={claudeSendRef}
                 connectRef={claudeConnectRef}
                 onConversationMessage={handleClaudeConversation}
