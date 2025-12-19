@@ -26,10 +26,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Try to get user from cookie or URL params (passed from gateway)
     const loadUser = async () => {
       try {
-        // Check for user data in cookie
         const cookies = document.cookie.split(';');
         const userCookie = cookies.find(c => c.trim().startsWith('dev_user='));
 
@@ -37,16 +35,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const userData = JSON.parse(decodeURIComponent(userCookie.split('=')[1]));
           setUser(userData);
         } else {
-          // Check URL params (for initial redirect from dashboard)
           const params = new URLSearchParams(window.location.search);
           const userData = params.get('user');
           if (userData) {
             const parsed = JSON.parse(decodeURIComponent(userData));
             setUser(parsed);
-            // Store in cookie for subsequent requests
-            document.cookie = `dev_user=${encodeURIComponent(JSON.stringify(parsed))}; path=/; max-age=86400`;
-            // Clean URL
+            document.cookie = \`dev_user=\${encodeURIComponent(JSON.stringify(parsed))}; path=/; max-age=86400\`;
             window.history.replaceState({}, '', window.location.pathname);
+          } else {
+            // Dev fallback - auto-login as admin when no auth
+            const devUser = {
+              id: 'dev-user-1',
+              name: 'Michael',
+              email: 'michael@kodiack.studio',
+              role: 'admin',
+            };
+            setUser(devUser);
+            document.cookie = \`dev_user=\${encodeURIComponent(JSON.stringify(devUser))}; path=/; max-age=86400\`;
           }
         }
       } catch (error) {
@@ -70,7 +75,6 @@ export function useUser() {
   return useContext(UserContext);
 }
 
-// Role hierarchy check
 const roleHierarchy: Record<string, number> = {
   superadmin: 100,
   admin: 90,
