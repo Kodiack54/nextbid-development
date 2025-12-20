@@ -5,8 +5,8 @@ export async function GET() {
   try {
     const { data: clients, error } = await db
       .from('dev_clients')
-      .select('id, slug, name, description, primary_color, is_active')
-      .eq('is_active', true)
+      .select('id, slug, name, description, active')
+      .eq('active', true)
       .order('name', { ascending: true });
 
     if (error) throw error;
