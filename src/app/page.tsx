@@ -718,7 +718,6 @@ User: The Boss`;
                 
                 {activePanel === 'schema' && <><SupabaseLogo /> DB Schema</>}
                 {activePanel === 'chatlog' && '📜 Chat Log'}
-                {activePanel === 'hub' && '🎯 Session Hub'}
                 {activePanel === 'storage' && '💾 Storage Monitor'}
                 {activePanel === 'health' && '🩺 AI Health'}
               </span>
@@ -743,14 +742,6 @@ User: The Boss`;
                   isSummarizing={isSummarizing}
                   onSendToClaudeTerminal={(msg) => claudeSendRef.current?.(msg)}
                   onSendToChad={handleSendToChad}
-                />
-              )}
-              {activePanel === 'hub' && (
-                <SessionHubPanel
-                  projectId={selectedProject?.id || null}
-                  userId={user?.id || null}
-                  workerStatus={catalogerStatus}
-                  onTriggerWorker={triggerCataloger}
                 />
               )}
               {activePanel === 'storage' && <StorageMonitorPanel />}

@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 export async function GET() {
   try {
     const { data: clients, error } = await db
-      .from('ai_clients')
+      .from('dev_clients')
       .select('id, slug, name, description, primary_color, is_active')
       .eq('is_active', true)
       .order('name', { ascending: true });
