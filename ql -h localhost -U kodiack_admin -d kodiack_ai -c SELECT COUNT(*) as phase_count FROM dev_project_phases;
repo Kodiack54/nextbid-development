@@ -1,0 +1,59 @@
+                  id                  |           name           |           slug           |              client_id               
+--------------------------------------+--------------------------+--------------------------+--------------------------------------
+ 503b7b97-a48a-40dc-81a3-5347dbe2af3d | 7106-Task Patcher        | task-patcher-7106        | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ dbbd2d6b-0bd1-4ce0-af3a-947e7256d3bf | 5101-Engine Dev          | engine-dev-5101          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 23c403f9-1a84-474d-a238-58010a46a7a6 | 7102-Source Patcher      | source-patcher-7102      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ b7a7effe-5303-4a9b-986c-0cab1ad8e3c1 | 7103-Bidder Patcher      | bidder-patcher-7103      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 880ad041-447b-4089-bb88-399efea32642 | 5102-Source Dev          | source-dev-5102          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 628d5927-edbb-414f-aecb-722832477b75 | 7100-Deploy Orchestrator | deploy-orchestrator-7100 | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 851af7a1-1f5b-4a1e-81ec-4954b82705e1 | 7101-Engine Patcher      | engine-patcher-7101      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ af9eeb98-f634-4165-9964-e04dc8448691 | 7104-Portal Patcher      | portal-patcher-7104      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 0b44df7f-094b-4666-8b2f-0c96ee424475 | 7105-Tech Patcher        | tech-patcher-7105        | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 50c91612-4848-4e30-8e01-1f5f08f641b1 | NextBid Engine           | nextbid-engine           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 40113343-de6c-410e-abf8-61bd0c29ace7 | NextBid Portal           | nextbid-portal           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ d12d990a-9667-41bf-a740-188725d6828c | NextBid Core             | nextbid-core             | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 5c4a7384-3784-4df8-a3f8-7e4b5a53d99f | NextBid Sources          | nextbid-sources          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 86705984-c55b-487a-af31-2691bf23815c | NextBidder               | nextbidder               | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 4a3ba361-5a0f-4410-b141-1af677aa531e | NextTech                 | nexttech                 | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 30aaa1d0-9162-461d-a633-81b5a9a735e3 | NextTask                 | nexttask                 | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ e6ef3526-4e80-43b5-92ff-d0943d56ee59 | 31001-Security           | 31001-security           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 6e1a862a-91b3-4311-86be-2cf573b7d545 | 31002-Administrative     | 31002-administrative     | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 04a1799f-d0f5-47e8-97ad-32458a368787 | 31003-Facilities         | 31003-facilities         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 59ff70e6-869f-4075-8ad6-de95125416e6 | 31004-Logistics          | 31004-logistics          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 813e7ab8-be21-4fdc-ae57-2270981c0788 | 31005-Electrical         | 31005-electrical         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 710ba964-d649-47b8-8231-78d93b206f48 | 31006-LowVoltage         | 31006-lowvoltage         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ db40dec0-adf5-4e95-8061-5ddf17a8e34e | 31007-Landscaping        | 31007-landscaping        | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 3632be16-16d0-4e07-a760-5e9f31b1417f | 31008-HVAC               | 31008-hvac               | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 1630af80-aa34-4775-9744-8b871397550a | 31009-Plumbing           | 31009-plumbing           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 4368fcfe-fd00-4375-80bd-5ad4d8a41743 | 31010-Janitorial         | 31010-janitorial         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 69ec49fb-d058-4973-96c9-39a7018b77e1 | 31011-Support            | 31011-support            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ e0165456-ede9-4dc7-8b15-883256d85996 | 31012-Waste              | 31012-waste              | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ c0479e47-be98-438c-b313-fe13fbe67d7c | 31013-Construction       | 31013-construction       | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 1cd4ce10-7143-4d82-a8e1-ee2ac8d2f39d | 31014-Roofing            | 31014-roofing            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 23f5737d-ca0a-4d28-a0b5-1b15e6b8a541 | 31015-Painting           | 31015-painting           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ cdbe73f9-9834-4532-a75e-20bb320fb800 | 31016-Flooring           | 31016-flooring           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 3180fe8f-5344-4b94-bc30-06ca681794c8 | 31017-Demolition         | 31017-demolition         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ fa041c70-d349-4786-9458-826079e96c0d | 31018-Environmental      | 31018-environmental      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ fd342582-3f2d-44fb-b8e6-58468391600f | 31019-Concrete           | 31019-concrete           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 07fd4fc7-e3e6-499e-87e4-1b3dd8f6068d | 31020-Fencing            | 31020-fencing            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ acc98831-5b64-437b-a180-5abdfd122fcb | 5001-Engine Test         | 5001-engine-test         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 6064b0ec-f9d4-4362-89e4-5dc06374ecf9 | 5002-Source Test         | 5002-source-test         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 3f586272-cbbf-4995-b5ae-f13b4fb1a9f9 | 5103-Bidder Dev          | 5103-bidder-dev          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ f4e240fd-208c-40f4-8057-0862ddfb92d0 | 5003-Bidder Test         | 5003-bidder-test         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 93a464d8-0356-43e0-a135-89a4856ed466 | 5104-Portal Dev          | 5104-portal-dev          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ f82f8cac-6466-4553-9cac-3f9dc31d3e6a | 5004-Portal Test         | 5004-portal-test         | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 1d2a8846-7250-41b9-94b5-50827cfc6041 | 5105-Tech Dev            | 5105-tech-dev            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 3dc5b4f9-28d3-40e5-9dbd-0700c97da475 | 5005-Tech Test           | 5005-tech-test           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ cf252b59-722a-484d-9c9f-c421aaadbb89 | 5106-Task Dev            | 5106-task-dev            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 276b4565-7624-4ef7-9657-3ebb328e85ed | 5006-Task Test           | 5006-task-test           | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ bd8a1b9a-f07b-4cf6-bd83-4cbfb9af7f18 | 8002-NextSource          | 8002-nextsource          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 5bedf486-5082-4e2c-9eba-1729e0e3c2c2 | 8003-NextBidder          | 8003-nextbidder          | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 423aa9d0-0214-4568-a5d7-2475c528c620 | 8004-NextBid Portal      | 8004-nextbid-portal      | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 93a09be4-ff2c-452f-aa31-14c1f04b385f | 8005-NextTech            | 8005-nexttech            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 17e300f1-a054-4315-adc7-304da0d99236 | 8006-NextTask            | 8006-nexttask            | 3f2bc2b0-ade9-4975-9b8f-9cd2900b1108
+ 21bdd846-7b03-4879-b5ea-04263594da1e | Kodiack Studios          | kodiack-studios          | e2cccab2-0977-4a86-b9c8-757ca76c4544
+ a88796a3-3680-44be-8d1b-e24079fdba2b | Development Studio       | dev-studio-5000          | e2cccab2-0977-4a86-b9c8-757ca76c4544
+ c45ed408-8606-45e7-849a-e4204ab76293 | Auth Service             | auth-7000                | e2cccab2-0977-4a86-b9c8-757ca76c4544
+ a550b623-bff3-4003-a50c-2075565d970d | AI Workers               | ai-workers               | e2cccab2-0977-4a86-b9c8-757ca76c4544
+(55 rows)
+

@@ -6,6 +6,7 @@
 
 const WebSocket = require('ws');
 const pty = require('node-pty');
+const fs = require('fs');
 
 const PORT = process.env.TERMINAL_WS_PORT || 5400;
 const sessions = new Map();
@@ -37,7 +38,11 @@ function broadcastToMonitors(data, sourceSession) {
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const mode = url.searchParams.get('mode') || 'user';
-  const projectPath = url.searchParams.get('path') || '/var/www/NextBid_Dev/dev-studio-5000';
+  let projectPath = url.searchParams.get('path') || '/var/www/Kodiack_Studio/dev-studio-5000';
+  if (!fs.existsSync(projectPath)) {
+    console.log(`[Terminal Server] Path ${projectPath} not found, using default`);
+    projectPath = '/var/www/Kodiack_Studio/dev-studio-5000';
+  }
   const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
   const source = url.searchParams.get('source') || 'unknown';
 

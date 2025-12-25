@@ -1,6 +1,6 @@
 {
   "name": "dev-studio-5000",
-  "version": "1.0.57",
+  "version": "1.0.60",
   "private": true,
   "scripts": {
     "dev": "next dev -p 5000",

@@ -40,7 +40,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           if (userData) {
             const parsed = JSON.parse(decodeURIComponent(userData));
             setUser(parsed);
-            document.cookie = \`dev_user=\${encodeURIComponent(JSON.stringify(parsed))}; path=/; max-age=86400\`;
+            document.cookie = `dev_user=\${encodeURIComponent(JSON.stringify(parsed))}; path=/; max-age=86400`;
             window.history.replaceState({}, '', window.location.pathname);
           } else {
             // Dev fallback - auto-login as admin when no auth
@@ -51,7 +51,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
               role: 'admin',
             };
             setUser(devUser);
-            document.cookie = \`dev_user=\${encodeURIComponent(JSON.stringify(devUser))}; path=/; max-age=86400\`;
+            document.cookie = `dev_user=\${encodeURIComponent(JSON.stringify(devUser))}; path=/; max-age=86400`;
           }
         }
       } catch (error) {
